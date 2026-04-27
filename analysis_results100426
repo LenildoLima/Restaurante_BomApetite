@@ -1,0 +1,59 @@
+# Análise Completa: Sistema de Lanchonete
+
+Este documento apresenta uma análise detalhada da arquitetura, funcionalidades e estado atual do sistema de gerenciamento de lanchonete.
+
+## 1. Visão Geral
+O sistema é uma aplicação web moderna voltada para o gerenciamento operacional de uma lanchonete, cobrindo desde o controle de estoque até a finalização de vendas (PDV) e análise de desempenho via dashboard.
+
+## 2. Arquitetura Técnica
+A stack tecnológica é robusta e segue as melhores práticas de desenvolvimento moderno:
+- **Frontend**: React 18 com TypeScript, utilizando Vite como bundler.
+- **Estilização**: Tailwind CSS com componentes de interface baseados na biblioteca **shadcn/ui** (Radix UI).
+- **Backend/Banco de Dados**: Supabase (PostgreSQL) para armazenamento de dados, autenticação e funções de banco de dados (RPC).
+- **Gerenciamento de Estado/Dados**: TanStack Query (React Query) para sincronização de dados e caching.
+- **Comunicação em Tempo Real**: Supabase Realtime para atualizações dinâmicas no dashboard.
+
+## 3. Principais Funcionalidades
+
+### 📊 Dashboard (Painel)
+- **Métricas em Tempo Real**: Total de vendas do dia, receita mensal, produtos ativos e alertas de estoque baixo.
+- **Visualização de Dados**: Gráfico de vendas dos últimos 7 dias (via Recharts).
+- **Listagens Rápidas**: Acesso imediato aos itens com pouco estoque e às últimas vendas realizadas.
+
+### 💳 Nova Venda (PDV)
+- **Interface Otimizada**: Fluxo inspirado em sistemas de ponto de venda, com pesquisa rápida e filtros por categoria.
+- **Checkout em 2 Passos**:
+  1. Configuração de pagamento, nome do cliente e observações.
+  2. Seleção do tipo de pedido (Local vs. Entrega) com gerenciamento de endereço e taxa de entrega.
+- **Atomicidade**: Utiliza uma função RPC (`realizar_venda`) para garantir que a venda e a baixa no estoque ocorram simultaneamente, evitando inconsistências.
+
+### 📦 Gestão de Produtos
+- **Controle de Estoque**: Monitoramento de quantidades e gatilhos de "estoque mínimo".
+- **Ficha Técnica Básica**: Registro de custo vs. preço para análise de margem de lucro.
+- **Status**: Ativação/desativação de produtos para controle de visibilidade no PDV.
+
+### 🧾 Histórico de Vendas
+- **Filtros Temporais**: Visualização por Hoje, Semana, Mês ou Todo o período.
+- **Detalhamento**: Consulta completa dos itens de cada venda, observações e taxas aplicadas.
+- **Gestão de Status**: Possibilidade de cancelar vendas (embora note-se que o estorno de estoque no cancelamento ainda parece ser manual).
+
+## 4. Estrutura de Dados (Schema)
+O banco de dados está bem estruturado em três tabelas centrais:
+1. `produtos`: Entidade mestre de itens.
+2. `vendas`: Registro mestre da transação financeira.
+3. `itens_venda`: Relacionamento N:N entre vendas e produtos, armazenando snapshots de preços no momento da venda.
+
+## 5. Pontos Fortes
+- **Performance**: O uso de Vite e React Query garante uma interface fluida.
+- **UX**: Design clean, focado na produtividade do operador.
+- **Tempo Real**: Dashboard reativo que dispensa o "F5" para atualização de dados.
+
+## 6. Oportunidades de Melhoria (Roadmap Sugerido)
+- **Estorno de Estoque**: Automatizar o retorno dos produtos ao estoque ao cancelar uma venda.
+- **Gestão de Categorias**: Mover as categorias de "Hardcoded" para uma tabela no banco de dados.
+- **Módulo Financeiro**: Adicionar controle de despesas para cálculo de lucro líquido real.
+- **Integração de Impressão**: Gerar cupom não fiscal (PDF ou térmico) após a venda.
+- **Sistema de Usuários**: Implementar níveis de acesso (Admin vs. Atendente).
+
+## 7. Conclusão
+O sistema está em um estado maturo e funcional, com uma base de código limpa e extensível. É uma solução profissional que atende bem às necessidades operacionais de uma lanchonete moderna.

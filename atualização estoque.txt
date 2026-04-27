@@ -1,0 +1,102 @@
+Seu amigo está descrevendo um modelo clássico de controle de estoque por movimentação, 
+bem diferente do que seu sistema usa hoje. Vou explicar:
+
+Abordagem atual do seu sistema
+===============================
+
+O campo estoque fica diretamente na tabela de produtos. Quando uma venda é feita, o sistema faz:
+
+( produtos.estoque = produtos.estoque - quantidade_vendida )
+
+Problema: Se algo der errado (venda cancelada, bug, etc.), você perde rastro do que aconteceu. 
+Não há histórico.
+
+
+Abordagem do seu amigo (modelo por movimentação)
+=================================================
+
+Produtos          → só descreve o produto (sem estoque)
+Estoque           → saldo atual por produto
+Entrada_Nota      → cabeçalho da compra (nota fiscal)
+Entrada_Nota_Item → cada item comprado naquela nota
+
+A lógica funciona assim:
+
+*- Entra mercadoria? → Cria uma Entrada_Nota com seus itens → Atualiza o Estoque.saldo
+*- Sai mercadoria (venda)? → Registra a saída → Debita do Estoque.saldo
+*- O saldo é sempre calculável: soma das entradas - soma das saídas
+
+
+Comparação
+===================
+
+				| Atual			| Amigo
+Simplicidade			| ✅ Simples		| ❌ Mais complexo
+Rastreabilidade			| ❌ Sem histórico	| ✅ Histórico completo
+Estorno de cancelamento		| ❌ Manual		| ✅ Automático
+Relatórios de giro		| ❌ Difícil		| ✅ Fácil
+Ideal para...			| PDV simples		| Estoque sério
+
+
+O modelo do seu amigo é o correto para um sistema profissional. 
+O seu atual é funcional mas perde rastreabilidade. Para uma lanchonete pequena, 
+o atual serve — mas se crescer, a migração vai ser necessária.
+
+Quer implementar esse novo modelo futuramente?
+
+
+==========================================
+
+Plano de implementação pronto! Resumindo o que será feito:
+
+Fase 1 (Banco): Criar tabelas estoque, entradas_nota e entradas_nota_item. 
+Migrar saldos existentes. Atualizar o RPC de venda para usar o novo sistema. 
+Adicionar estorno automático ao cancelar venda.
+
+Fase 2 (Frontend): Atualizar Products.tsx, NewSale.tsx e Dashboard.tsx. 
+Criar nova página Entradas de Mercadoria (para dar entrada de estoque via nota).
+
+Revise o plano detalhado e me diga se pode seguir em frente!
+
+
+
+=================================================
+
+Sim! Exatamente como o amigo falou — a produtos vai perder o campo estoque. 
+Só manterei ele temporariamente durante a migração para não perder os dados. 
+Vou deixar isso mais claro no plano.
+
+O fluxo completo de migração da produtos fica assim:
+
+Etapa				| O que acontece com produtos.estoque
+1. Criar novas tabelas		| Campo ainda existe, sistema continua funcionando
+2. Migrar dados			| estoque.saldo recebe os valores de produtos.estoque
+3. Atualizar RPC e frontend	| Sistema passa a usar estoque.saldo
+4. Validar tudo funcionando	| Testar entradas, vendas, cancelamento
+5. Remover campo		| ALTER TABLE produtos DROP COLUMN estoque
+
+Então sim — no final a tabela produtos fica sem o campo estoque, exatamente como seu amigo descreveu. 
+Posso prosseguir com a implementação?
+
+
+=====================================================
+
+Sim, finalizamos toda a parte principal!
+
+A estrutura agora está assim:
+
+Novas tabelas (estoque, entradas_nota, entradas_nota_item) criadas e funcionando.
+Frontend 100% atualizado:
+
+	*- As telas agora leem o estoque da nova tabela independente (estoque.saldo).
+	*- Uma nova página "Entradas" foi criada (no menu Gestão > Entradas) para você lançar compras e notas. 
+	Isso soma produtos no estoque automaticamente.
+	*- Se você cancelar uma Venda, o sistema agora faz o estorno automático devolvendo o produto para a tabela 
+	estoque.
+	*- Os alertas de estoque mínimo no Dashboard também já usam a tabela nova.
+
+O que ficou pendente apenas para o futuro: Deixamos o campo velho produtos.estoque lá atoa por enquanto, 
+apenas como segurança. Depois que você usar a lanchonete amanhã e ver que o novo modelo de estoque não deu 
+nenhum bug, aí a gente apaga essa coluna velha de vez.
+
+Pode recarregar a sua página da lanchonete e testar o menu de "Entradas" e depois a tela de Vendas!
