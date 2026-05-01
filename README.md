@@ -1,187 +1,149 @@
-# 🍔 LaunchApp - Gestão de Lanchonete
+# 🍽️ Bom Apetite - Sistema de Gestão de Marmitaria
 
-O **LaunchApp** é um sistema de PDV (Ponto de Venda) premium e intuitivo, desenvolvido para otimizar a operação de lanchonetes e pequenos estabelecimentos de alimentação. O sistema oferece controle avançado de estoque, gestão de clientes, autenticação baseada em funções, dashboard em tempo real, e um fluxo especializado para pedidos de entrega (Delivery) com impressão de recibos.
+O **Bom Apetite** é um sistema completo de gestão para restaurantes e marmitarias, desenvolvido com foco em praticidade operacional. Integra PDV interno, catálogo online para clientes, cozinha digital (KDS), controle de entregas e gestão financeira em uma única plataforma moderna.
 
-## 🚀 Funcionalidades Principais
+## 🚀 Funcionalidades
 
-- **Segurança e Autenticação (Supabase Auth)**: Sistema de login seguro com perfis de acesso (`admin` e `atendente`), garantindo que apenas administradores tenham acesso a áreas sensíveis como Entradas de Estoque e Dashboard Financeiro.
-- **Painel de Controle (Dashboard)**: Métricas financeiras em tempo real, gráficos de faturamento mensal e alertas inteligentes de estoque baixo.
-- **Sistema de Estoque Profissional (Ledger)**: Controle de estoque baseado em movimentações. Registre entradas de mercadorias com custos, com atualização automática do saldo real. Estorno automático de produtos em caso de cancelamento de vendas.
-- **Gestão de Clientes Inteligente**: Durante o fechamento da venda, busque clientes existentes pelo nome/telefone ou cadastre novos clientes sem sair da tela.
-- **PDV (Nova Venda) e Impressão Térmica**: Checkout fluido para pedidos locais e delivery (endereço, telefone, taxa de entrega automática, e cálculo de troco). Inclui módulo de **impressão para impressoras térmicas de 80mm**.
-- **Auditoria de Ações**: Rastreio automático de ações críticas realizadas no sistema (ex: alterações de produtos e vendas canceladas).
-- **Interface Premium**: Design moderno com paleta Navy Blue (Azul Marinho), menus em dropdown elegantes (com avatar do usuário), design totalmente responsivo e micro-interações que elevam a experiência do usuário.
+### 🛒 Catálogo Online (Público)
+- Cardápio digital acessível pelo cliente via link
+- Fluxo de pedido em 3 passos: tipo de entrega → dados pessoais → pagamento
+- **Pagar agora com PIX** (QR Code gerado automaticamente via Mercado Pago)
+- **Pagar na Retirada/Entrega** (Dinheiro, Cartão) — status fica pendente até o pagamento físico
+- Opção "Fiado" removida do catálogo (disponível apenas no PDV interno)
+- Compartilhamento do pedido via WhatsApp
+- Histórico de pedidos por cliente (armazenado localmente)
 
-## 🛠️ Tecnologias Utilizadas
+### 🖥️ PDV Interno (Nova Venda)
+- Lançamento rápido de vendas para atendentes
+- Suporte a produtos com variações de tamanho (P, M, G)
+- Modalidades: Balcão, Mesa, Delivery e Retirada
+- Taxa de entrega automática via configuração global
+- Gestão de mesas em aberto com adição de itens
+- Impressão de recibos para impressoras térmicas 80mm
 
-- **Frontend**: React 18, Vite, TypeScript.
-- **UI/UX**: Tailwind CSS, Shadcn UI, Lucide Icons, Gráficos com Recharts.
-- **Backend & Autenticação**: Supabase (PostgreSQL, Auth, Realtime, Edge Functions).
+### 👨‍🍳 Cozinha Digital (KDS)
+- Visão em tempo real dos pedidos por status: Fila de Espera → Em Preparo → Pronto/Aguardando
+- Fluxo de finalização: ao clicar **"Entregue"**, a venda é marcada como **Concluída** e o estoque é debitado automaticamente
+- Alertas visuais de tempo de espera por pedido
+- Suporte a pedidos de Delivery e Retirada com badge distintivo
 
-## 📦 Como Instalar e Rodar Localmente
+### 🛵 Gestão de Entregas
+- Painel de entregas com filtro por status
+- Atribuição de entregadores por pedido
+- Confirmação de entrega e cálculo de acerto com entregadores
 
-1. Clone o repositório:
+### 💰 Financeiro e Caixa
+- Abertura e fechamento de caixa com saldo inicial/final
+- Movimentações de entrada e saída
+- Dashboard com métricas de faturamento diário/mensal
+- Gráficos de vendas com Recharts
+
+### 📦 Estoque
+- Controle via ledger de movimentações (entradas e saídas)
+- Registro de entradas com fornecedor e custo unitário
+- Estorno automático de estoque em cancelamentos
+- Alertas de estoque baixo no dashboard
+
+### 👥 Gestão de Usuários
+- Perfis de acesso: `admin` e `atendente`
+- Administradores gerenciam usuários, produtos, relatórios e configurações
+- Auditoria de ações críticas (vendas canceladas, alterações de produto, etc.)
+
+### ⚙️ Configurações
+- Taxa de entrega global (aplicada automaticamente no PDV e no Catálogo)
+- Backup e restauração de dados
+
+---
+
+## 🛠️ Tecnologias
+
+| Camada | Tecnologia |
+|---|---|
+| Frontend | React 18, Vite, TypeScript |
+| UI/UX | Tailwind CSS, Shadcn UI, Lucide Icons |
+| Gráficos | Recharts |
+| Backend | Supabase (PostgreSQL, Auth, Realtime) |
+| Pagamentos | Mercado Pago (PIX via Edge Functions) |
+
+---
+
+## 📦 Como Rodar Localmente
+
+1. **Clone o repositório:**
    ```bash
-   git clone https://github.com/LenildoLima/gerenciador-lanchonete.git
+   git clone https://github.com/LenildoLima/Restaurante_BomApetite.git
+   cd Restaurante_BomApetite
    ```
-2. Instale as dependências:
+
+2. **Instale as dependências:**
    ```bash
    npm install
    ```
-3. Configure as variáveis de ambiente baseando-se no arquivo `.env.example` ou crie o `.env`:
-   ```bash
+
+3. **Configure as variáveis de ambiente** (crie um arquivo `.env`):
+   ```env
    VITE_SUPABASE_URL=sua_url_aqui
    VITE_SUPABASE_ANON_KEY=sua_chave_anonima_aqui
    ```
-4. Inicie o servidor de desenvolvimento:
+
+4. **Execute as migrations no Supabase:**
+   - Acesse o **Supabase SQL Editor**
+   - Execute os arquivos da pasta `supabase/migrations/` em ordem cronológica
+
+5. **Inicie o servidor:**
    ```bash
    npm run dev
    ```
+   Acesse em `http://localhost:8080`
 
-## 🗄️ Estrutura do Banco de Dados (Supabase)
+---
 
-O esquema do banco de dados evoluiu significativamente. Em vez de rodar um arquivo de SQL gigante manually, você pode (e deve) utilizar as **Subapase Migrations** presentes na pasta `supabase/migrations/` para refletir as tabelas e RPCs (como o controle atômico de vendas e os estornos automáticos de estoque).
+## 🗄️ Estrutura do Banco de Dados
 
-### Visão Geral do Esquema SQL
+### Principais Tabelas
 
-O código abaixo representa a estrutura fundamental das principais tabelas do sistema:
+| Tabela | Descrição |
+|---|---|
+| `usuarios` | Perfis de acesso (admin/atendente) |
+| `clientes` | Cadastro de clientes com telefone e endereço |
+| `produtos` | Catálogo com preço, custo e categoria |
+| `categorias` | Agrupamento de produtos |
+| `estoque` | Saldo atual por produto |
+| `movimentacoes_estoque` | Ledger de entradas e saídas |
+| `vendas` | Registro de vendas com status do ciclo de vida |
+| `itens_venda` | Itens de cada venda com `status_cozinha` |
+| `formas_pagamento` | PIX, Dinheiro, Cartão, etc. |
+| `entregas` | Pedidos de delivery com endereço e taxa |
+| `entregadores` | Cadastro de entregadores com taxa fixa |
+| `caixas` | Controle de abertura/fechamento de caixa |
+| `configuracoes` | Chave-valor para configurações globais (ex: `taxa_entrega`) |
+| `auditoria` | Log de ações críticas por usuário |
 
-```sql
--- SEGURANÇA E ACESSO
-CREATE TABLE public.usuarios (
-  id uuid PRIMARY KEY,
-  nome text NOT NULL,
-  email text UNIQUE NOT NULL,
-  perfil text NOT NULL,
-  ativo boolean DEFAULT true
-);
+### RPCs Principais (Supabase Functions)
 
-CREATE TABLE public.auditoria (
-  id uuid PRIMARY KEY,
-  usuario_id uuid REFERENCES public.usuarios(id),
-  acao text NOT NULL,
-  detalhes jsonb
-);
+| Função | Descrição |
+|---|---|
+| `realizar_venda` | Cria venda, itens e debita estoque atomicamente |
+| `processar_confirmacao_online` | Confirma pedido online → muda status para "Em preparo" |
+| `processar_recusa_online` | Recusa e cancela um pedido online |
+| `concluir_venda_entrega` | Finaliza venda como "Concluída" e debita estoque |
 
-CREATE TABLE public.solicitacoes_senha (
-  id uuid PRIMARY KEY,
-  usuario_id uuid REFERENCES public.usuarios(id),
-  status text
-);
+---
 
--- CATÁLOGO DE PRODUTOS
-CREATE TABLE public.categorias (
-  id uuid PRIMARY KEY,
-  nome text NOT NULL
-);
+## 📋 Ciclo de Vida dos Pedidos Online
 
-CREATE TABLE public.produtos (
-  id uuid PRIMARY KEY,
-  nome text NOT NULL,
-  categoria_id uuid REFERENCES public.categorias(id),
-  preco numeric NOT NULL,
-  custo numeric DEFAULT 0,
-  estoque_minimo integer DEFAULT 5,
-  ativo boolean DEFAULT true
-);
-
--- SISTEMA DE ESTOQUE E COMPRAS
-CREATE TABLE public.estoque (
-  produto_id uuid PRIMARY KEY REFERENCES public.produtos(id),
-  saldo integer DEFAULT 0,
-  atualizado_em timestamptz DEFAULT now()
-);
-
-CREATE TABLE public.entradas_nota (
-  id uuid PRIMARY KEY,
-  fornecedor text,
-  observacoes text,
-  criado_em timestamptz DEFAULT now()
-);
-
-CREATE TABLE public.entradas_nota_item (
-  id uuid PRIMARY KEY,
-  entrada_id uuid REFERENCES public.entradas_nota(id),
-  produto_id uuid REFERENCES public.produtos(id),
-  quantidade integer NOT NULL,
-  custo_unitario numeric NOT NULL
-);
-
--- CLIENTES
-CREATE TABLE public.clientes (
-  id uuid PRIMARY KEY,
-  nome text NOT NULL,
-  telefone text,
-  endereco text,
-  complemento text,
-  saldo_devedor numeric
-);
-
--- CAIXA E FINANCEIRO
-CREATE TABLE public.caixas (
-  id uuid PRIMARY KEY,
-  status text, -- Aberto, Fechado
-  aberto_em timestamptz,
-  fechado_em timestamptz,
-  saldo_inicial numeric,
-  saldo_final numeric
-);
-
-CREATE TABLE public.caixa_movimentacoes (
-  id uuid PRIMARY KEY,
-  caixa_id uuid REFERENCES public.caixas(id),
-  tipo text, -- Entrada, Saída
-  valor numeric,
-  descricao text
-);
-
-CREATE TABLE public.formas_pagamento (
-  id uuid PRIMARY KEY,
-  nome text NOT NULL
-);
-
--- FLUXO DE VENDAS (PDV)
-CREATE TABLE public.vendas (
-  id uuid PRIMARY KEY,
-  total numeric DEFAULT 0,
-  forma_pagamento_id uuid REFERENCES public.formas_pagamento(id),
-  nome_cliente text,
-  cliente_id uuid REFERENCES public.clientes(id),
-  situacao text DEFAULT 'Concluída'
-);
-
-CREATE TABLE public.itens_venda (
-  id uuid PRIMARY KEY,
-  venda_id uuid REFERENCES public.vendas(id),
-  produto_id uuid REFERENCES public.produtos(id),
-  nome_produto text,
-  quantidade integer NOT NULL,
-  preco_unitario numeric NOT NULL
-);
-
--- DELIVERY E ENTREGADORES
-CREATE TABLE public.entregadores (
-  id uuid PRIMARY KEY,
-  nome text NOT NULL,
-  telefone text,
-  taxa_fixa numeric
-);
-
-CREATE TABLE public.entregas (
-  id uuid PRIMARY KEY,
-  venda_id uuid REFERENCES public.vendas(id),
-  entregador_id uuid REFERENCES public.entregadores(id),
-  endereco text,
-  taxa numeric
-);
-
-CREATE TABLE public.pagamentos_entregadores (
-  id uuid PRIMARY KEY,
-  entregador_id uuid REFERENCES public.entregadores(id),
-  valor_pago numeric,
-  data_pagamento timestamptz DEFAULT now()
-);
+```
+Cliente faz pedido (Catálogo)
+        ↓
+  "Aguardando confirmação"
+        ↓ (Atendente clica "Confirmar" em Vendas)
+     "Em preparo" → aparece no KDS
+        ↓ (Cozinha avança: Pendente → Preparando → Pronto)
+  "Pronto / Aguardando"
+        ↓ (KDS clica "Entregue")
+      "Concluída" → conta no caixa ✅
 ```
 
 ---
-*Desenvolvido com ❤️ para facilitar a gestão e escalar os negócios da sua lanchonete.*
+
+*Desenvolvido com ❤️ para o Restaurante Bom Apetite.*
