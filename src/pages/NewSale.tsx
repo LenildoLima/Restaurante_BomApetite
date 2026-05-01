@@ -2,7 +2,7 @@ import { useEffect, useState, useRef } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { formatCurrency, getCategoriaBadgeClass } from "@/lib/format";
-import { Search, ShoppingCart, Plus, Minus, X, UserPlus, Check, Printer, User } from "lucide-react";
+import { Search, ShoppingCart, Plus, Minus, X, UserPlus, Check, Printer, User, Package } from "lucide-react";
 import { registrarAuditoria } from "@/lib/auditoria";
 import { useAuth } from "@/hooks/use-auth";
 import { Input } from "@/components/ui/input";
@@ -29,6 +29,10 @@ interface Product {
   estoque?: any;
   ativo: boolean;
   imagem_url?: string;
+  produto_pai_id?: string | null;
+  tem_variacoes?: boolean;
+  preco_min?: number;
+  preco_max?: number;
 }
 interface Category { id: string; nome: string; }
 interface PaymentMethod { id: string; nome: string; }
@@ -249,6 +253,7 @@ export default function NewSale() {
   const [paymentMethodId, setPaymentMethodId] = useState("");
   const [notes, setNotes] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSavingClient, setIsSavingClient] = useState(false);
   const maskPhone = (v: string) => {
     let r = v.replace(/\D/g, "");
     if (r.length > 11) r = r.substring(0, 11);
@@ -273,6 +278,12 @@ export default function NewSale() {
   // Mobile
   const [isMobile, setIsMobile] = useState(false);
   const [isCartDrawerOpen, setIsCartDrawerOpen] = useState(false);
+
+  // Variations Modal
+  const [isVariationsOpen, setIsVariationsOpen] = useState(false);
+  const [selectedParent, setSelectedParent] = useState<Product | null>(null);
+  const [selectedVariations, setSelectedVariations] = useState<Product[]>([]);
+  const [loadingVariations, setLoadingVariations] = useState(false);
 
   useEffect(() => {
     const checkMobile = () => {
@@ -307,11 +318,43 @@ export default function NewSale() {
 
   async function fetchInitialData() {
     const [prodRes, catRes, payRes] = await Promise.all([
-      supabase.from("produtos").select("*, categorias(nome), estoque(saldo)").eq("ativo", true).order("nome"),
+      supabase.from("produtos").select("*, categorias(nome), estoque(saldo)").order("nome"),
       supabase.from("categorias").select("*").order("nome"),
       supabase.from("formas_pagamento").select("*").order("nome"),
     ]);
-    setProducts((prodRes.data as any[]) || []);
+
+    const allData = (prodRes.data as any[]) || [];
+    
+    // Process products to handle variations logic
+    const processedProducts: Product[] = allData.filter(p => {
+      // 1. If product is active and has no parent, it's a standalone product (or a child product being shown directly, though we'll handle children separately)
+      // Actually, children should not be shown in the main list if mereka punya parent id.
+      if (p.ativo && !p.produto_pai_id) return true;
+      
+      // 2. If product is a parent (no parent id AND inactive or active) but has active variations
+      if (!p.produto_pai_id) {
+        const hasActiveChildren = allData.some(f => f.produto_pai_id === p.id && f.ativo);
+        if (hasActiveChildren) return true;
+      }
+
+      return false;
+    }).map(p => {
+      const children = allData.filter(f => f.produto_pai_id === p.id && f.ativo);
+      const isParent = children.length > 0;
+      
+      if (isParent) {
+        const precos = children.map(c => c.preco);
+        return {
+          ...p,
+          tem_variacoes: true,
+          preco_min: Math.min(...precos),
+          preco_max: Math.max(...precos)
+        };
+      }
+      return p;
+    });
+
+    setProducts(processedProducts);
     setCategories((catRes.data as Category[]) || []);
     setPaymentMethods((payRes.data as PaymentMethod[]) || []);
   }
@@ -337,6 +380,29 @@ export default function NewSale() {
     setComplement(client.complemento || "");
     setShowSuggestions(false);
     setShowNewClientForm(false);
+  }
+
+  async function openVariations(parent: Product) {
+    setSelectedParent(parent);
+    setLoadingVariations(true);
+    setIsVariationsOpen(true);
+    
+    try {
+      const { data, error } = await supabase
+        .from("produtos")
+        .select("*, estoque(saldo)")
+        .eq("produto_pai_id", parent.id)
+        .eq("ativo", true)
+        .order("preco", { ascending: true });
+        
+      if (error) throw error;
+      setSelectedVariations((data as any[]) || []);
+    } catch (err) {
+      console.error(err);
+      toast.error("Erro ao carregar variações");
+    } finally {
+      setLoadingVariations(false);
+    }
   }
 
   function clearClient() {
@@ -776,48 +842,79 @@ export default function NewSale() {
             {filtered.map((p) => {
               const catName = p.categorias?.nome || 'Geral';
               const style = getStyle(catName);
+              const hasVariations = p.tem_variacoes;
+              
               return (
-                <button 
+                <div 
                   key={p.id} 
-                  onClick={() => addToCart(p)} 
-                  disabled={((p.estoque?.saldo ?? p.estoque?.[0]?.saldo) ?? 0) <= 0}
                   style={{
                     background: style.bgSoft,
                     borderColor: style.border,
                   }}
-                  className={`rounded-xl border-2 text-left transition-all hover:shadow-lg overflow-hidden flex flex-col ${((p.estoque?.saldo ?? p.estoque?.[0]?.saldo) ?? 0) <= 0 ? "opacity-50 cursor-not-allowed" : "cursor-pointer hover:scale-[1.02] active:scale-95"}`}
+                  className={`rounded-xl border-2 text-left transition-all hover:shadow-lg overflow-hidden flex flex-col relative group ${!hasVariations && ((p.estoque?.saldo ?? p.estoque?.[0]?.saldo) ?? 0) <= 0 ? "opacity-50" : "hover:scale-[1.02] active:scale-95"}`}
                 >
-                  {p.imagem_url ? (
-                    <div className="w-full h-32 bg-muted relative shrink-0">
+                  <div className="w-full h-32 bg-muted relative shrink-0">
+                    {p.imagem_url ? (
                       <img src={p.imagem_url} alt={p.nome} className="w-full h-full object-cover" />
-                      <div className="absolute top-2 left-2">
-                        <span style={{ background: style.bg, color: "#fff" }} className="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded-md shadow-sm">
-                          {catName}
-                        </span>
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center bg-muted">
+                        <Package className="w-8 h-8 text-muted-foreground opacity-20" />
                       </div>
+                    )}
+                    <div className="absolute top-2 left-2">
+                      <span style={{ background: style.bg, color: "#fff" }} className="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded-md shadow-sm">
+                        {catName}
+                      </span>
+                    </div>
+                    {!hasVariations && (
                       <div className="absolute top-2 right-2 bg-background/90 px-1.5 py-0.5 rounded-md shadow-sm">
                         <span className="text-[10px] text-foreground font-bold">{((p.estoque?.saldo ?? p.estoque?.[0]?.saldo) ?? 0)} un.</span>
                       </div>
-                    </div>
-                  ) : null}
-                  <div className="p-3 flex-1 flex flex-col w-full">
-                    {!p.imagem_url && (
-                      <div className="flex items-start justify-between mb-1.5">
-                        <span 
-                          style={{ background: style.bg, color: "#fff" }}
-                          className="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded-md"
-                        >
-                          {catName}
-                        </span>
-                        <span className="text-[10px] text-muted-foreground font-bold">{((p.estoque?.saldo ?? p.estoque?.[0]?.saldo) ?? 0)} un.</span>
-                      </div>
                     )}
-                    <p className={`font-bold text-sm leading-tight truncate mb-1 text-[#1e3a8a] ${p.imagem_url ? "mt-1" : ""}`} title={p.nome}>{p.nome}</p>
-                    <div className="mt-auto pt-1">
-                      <p style={{ color: style.text }} className="font-black text-base">{formatCurrency(p.preco)}</p>
+                  </div>
+
+                  <div className="p-3 flex-1 flex flex-col justify-between">
+                    <div>
+                      <h3 className="font-bold text-[#1e3a8a] text-sm leading-tight line-clamp-2 mb-1">{p.nome}</h3>
+                    </div>
+                    
+                    <div className="flex items-center justify-between mt-2">
+                      <div className="flex flex-col">
+                        <span className="text-[10px] text-muted-foreground uppercase font-semibold">Preço</span>
+                        <span className="font-black text-primary text-base">
+                          {hasVariations 
+                            ? `${formatCurrency(p.preco_min || 0)} ~ ${formatCurrency(p.preco_max || 0)}`
+                            : formatCurrency(p.preco)
+                          }
+                        </span>
+                      </div>
+                      
+                      {!hasVariations ? (
+                        <button 
+                          onClick={(e) => { e.stopPropagation(); addToCart(p); }}
+                          disabled={((p.estoque?.saldo ?? p.estoque?.[0]?.saldo) ?? 0) <= 0}
+                          className="z-10 w-8 h-8 rounded-lg bg-primary text-white flex items-center justify-center shadow-md hover:shadow-lg transition-all active:scale-90 disabled:opacity-50 disabled:shadow-none"
+                        >
+                          <Plus size={18} />
+                        </button>
+                      ) : (
+                        <button 
+                          onClick={() => openVariations(p)}
+                          className="z-10 px-2 py-1 rounded-lg bg-primary/10 text-primary text-[10px] font-bold uppercase tracking-wider hover:bg-primary hover:text-white transition-all shadow-sm"
+                        >
+                          Tamanhos
+                        </button>
+                      )}
                     </div>
                   </div>
-                </button>
+                  
+                  {/* Click overlay for the whole card */}
+                  <button 
+                    className="absolute inset-0 z-0 bg-transparent" 
+                    onClick={() => hasVariations ? openVariations(p) : addToCart(p)}
+                    disabled={!hasVariations && ((p.estoque?.saldo ?? p.estoque?.[0]?.saldo) ?? 0) <= 0}
+                  />
+                </div>
               );
             })}
           </div>
@@ -1302,6 +1399,95 @@ export default function NewSale() {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* ===== VARIATIONS DRAWER ===== */}
+      <Drawer open={isVariationsOpen} onOpenChange={setIsVariationsOpen}>
+        <DrawerContent className="max-h-[85vh] focus:outline-none">
+          <DrawerHeader className="border-b border-border/50 pb-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <DrawerTitle className="text-xl font-bold text-[#1e3a8a]">{selectedParent?.nome}</DrawerTitle>
+                <p className="text-sm text-muted-foreground">Escolha o tamanho disponível</p>
+              </div>
+              <DrawerClose asChild>
+                <Button variant="ghost" size="icon" className="rounded-full">
+                  <X className="w-5 h-5" />
+                </Button>
+              </DrawerClose>
+            </div>
+          </DrawerHeader>
+
+          <div className="p-4 overflow-y-auto">
+            {loadingVariations ? (
+              <div className="flex flex-col items-center justify-center py-12 gap-3">
+                <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+                <p className="text-sm text-muted-foreground font-medium">Carregando tamanhos...</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {selectedParent?.imagem_url && (
+                  <div className="w-full h-40 rounded-2xl overflow-hidden mb-6 shadow-sm border border-border/50">
+                    <img src={selectedParent.imagem_url} alt={selectedParent.nome} className="w-full h-full object-cover" />
+                  </div>
+                )}
+                
+                <div className="grid grid-cols-1 gap-3">
+                  {selectedVariations.map((v) => {
+                    const stock = (v.estoque?.saldo ?? v.estoque?.[0]?.saldo) ?? 0;
+                    const isOutOfStock = stock <= 0;
+                    
+                    return (
+                      <button
+                        key={v.id}
+                        disabled={isOutOfStock}
+                        onClick={() => {
+                          addToCart(v);
+                          setIsVariationsOpen(false);
+                        }}
+                        className={`flex items-center justify-between p-4 rounded-2xl border-2 transition-all active:scale-[0.98] ${
+                          isOutOfStock 
+                            ? "bg-muted/30 border-dashed border-border opacity-60 grayscale cursor-not-allowed" 
+                            : "bg-card border-border hover:border-primary hover:bg-primary/5 cursor-pointer shadow-sm hover:shadow-md"
+                        }`}
+                      >
+                        <div className="flex items-center gap-4">
+                          <div className={`w-12 h-12 rounded-xl flex items-center justify-center font-black text-lg ${
+                            isOutOfStock ? "bg-muted text-muted-foreground" : "bg-primary/10 text-primary"
+                          }`}>
+                            {v.nome.split('-').pop()?.trim() || v.nome}
+                          </div>
+                          <div className="text-left">
+                            <p className="font-bold text-foreground">{v.nome}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {isOutOfStock ? "Esgotado" : `Em estoque: ${stock} un.`}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-lg font-black text-primary">{formatCurrency(v.preco)}</p>
+                          {!isOutOfStock && (
+                            <span className="text-[10px] bg-primary text-white px-2 py-0.5 rounded-full font-bold uppercase tracking-wider">
+                              Adicionar
+                            </span>
+                          )}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+
+          <DrawerFooter className="border-t border-border/50 pt-4">
+            <DrawerClose asChild>
+              <Button variant="outline" className="w-full h-12 rounded-xl font-bold border-primary/20 text-primary hover:bg-primary/5">
+                Voltar ao Cardápio
+              </Button>
+            </DrawerClose>
+          </DrawerFooter>
+        </DrawerContent>
+      </Drawer>
     </div>
   );
 }

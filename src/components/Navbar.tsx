@@ -17,7 +17,8 @@ import {
   User,
   PackagePlus,
   ChefHat,
-  Database
+  Database,
+  BarChart3
 } from "lucide-react";
 import { useLocation, Link } from "react-router-dom";
 import { useState, useRef, useEffect } from "react";
@@ -31,6 +32,7 @@ const dropdownGroups = [
     icon: ShoppingBag,
     items: [
       { title: "Nova Venda", url: "/nova-venda", icon: ShoppingCart, color: "#16a34a", perfis: ["admin", "atendente"] },
+      { title: "Produtos Vendidos", url: "/vendas-produtos", icon: BarChart3, color: "#D4521A", perfis: ["admin"] },
       { title: "Cozinha (KDS)", url: "/cozinha", icon: ChefHat, color: "#f59e0b", perfis: ["admin", "atendente", "cozinheiro"] },
       { title: "Vendas", url: "/vendas", icon: Receipt, color: "#2563eb", perfis: ["admin", "atendente"] },
       { title: "Entregas", url: "/entregas", icon: Bike, color: "#db2777", perfis: ["admin", "atendente"] },
@@ -374,6 +376,7 @@ export function Navbar() {
                   {usuario?.perfil !== "cozinheiro" && (
                     <>
                       <DrawerLink to="/nova-venda" label="Nova Venda" icon={ShoppingCart} color="#16a34a" active={location.pathname === "/nova-venda"} onClick={() => setIsOpen(false)} />
+                      <DrawerLink to="/vendas-produtos" label="Produtos Vendidos" icon={BarChart3} color="#D4521A" active={location.pathname === "/vendas-produtos"} onClick={() => setIsOpen(false)} />
                       <DrawerLink to="/vendas" label="Vendas" icon={Receipt} color="#2563eb" active={location.pathname === "/vendas"} onClick={() => setIsOpen(false)} />
                       <DrawerLink to="/entregas" label="Entregas" icon={Bike} color="#db2777" active={location.pathname === "/entregas"} onClick={() => setIsOpen(false)} />
                     </>

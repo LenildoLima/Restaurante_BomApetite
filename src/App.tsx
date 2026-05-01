@@ -24,6 +24,7 @@ import Entradas from "./pages/Entradas";
 import KDS from "./pages/KDS";
 import Backup from "./pages/Backup";
 import Catalogo from "./pages/Catalogo";
+import ProductSales from "./pages/ProductSales";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -213,6 +214,16 @@ const App = () => (
                 <ProtectedRoute>
                   <AppLayout>
                     <Entradas />
+                  </AppLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/vendas-produtos"
+              element={
+                <ProtectedRoute>
+                  <AppLayout>
+                    <ProductSales />
                   </AppLayout>
                 </ProtectedRoute>
               }
