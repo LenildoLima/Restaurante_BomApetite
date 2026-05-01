@@ -13,6 +13,7 @@ export interface PedidoOnline {
   formas_pagamento?: { nome: string } | null;
   entregas?: { endereco: string; telefone: string; taxa: number }[];
   itens?: { nome_produto: string; quantidade: number; preco_unitario: number }[];
+  tipo_pedido?: string;
 }
 
 function playBeep() {
@@ -72,7 +73,7 @@ export function useOnlineOrders() {
     const { data } = await supabase
       .from('vendas')
       .select(`
-        id, criado_em, nome_cliente, total, situacao, observacoes, forma_pagamento_id,
+        id, criado_em, nome_cliente, total, situacao, observacoes, forma_pagamento_id, tipo_pedido,
         formas_pagamento(nome),
         entregas(endereco, telefone, taxa)
       `)

@@ -24,6 +24,7 @@ import Entradas from "./pages/Entradas";
 import KDS from "./pages/KDS";
 import Backup from "./pages/Backup";
 import Catalogo from "./pages/Catalogo";
+import Configuracoes from "./pages/Configuracoes";
 import ProductSales from "./pages/ProductSales";
 import NotFound from "./pages/NotFound";
 
@@ -203,6 +204,16 @@ const App = () => (
                 <ProtectedRoute apenasAdmin>
                   <AppLayout>
                     <Backup />
+                  </AppLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/configuracoes"
+              element={
+                <ProtectedRoute apenasAdmin>
+                  <AppLayout>
+                    <Configuracoes />
                   </AppLayout>
                 </ProtectedRoute>
               }

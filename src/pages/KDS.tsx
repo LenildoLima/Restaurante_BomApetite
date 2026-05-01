@@ -204,21 +204,37 @@ export default function KDS() {
         }
       }
 
-      // 2. Mantém comportamento para quando o status é ENTREGUE (balão/finalização)
+      // 2. Quando status é ENTREGUE: finaliza a venda (conta no caixa, debita estoque)
       if (novoStatus === 'entregue') {
         const { data: faltantes } = await (supabase as any)
           .from("itens_venda")
           .select("id")
           .eq("venda_id", grupo.venda_id)
-          .not("status_cozinha", "in", '("entregue", "cancelado", "concluído")');
+          .not("status_cozinha", "in", "(entregue,cancelado,concluído)");
 
         if (!faltantes || faltantes.length === 0) {
+          // Tenta usar a RPC (debita estoque e marca como concluída)
+          const { error: rpcError } = await (supabase as any).rpc("concluir_venda_entrega", {
+            p_venda_id: grupo.venda_id
+          });
+
+          // Se a RPC falhar (ex: não existe ainda), atualiza o status diretamente
+          if (rpcError) {
+            console.warn("RPC concluir_venda_entrega indisponível, atualizando status diretamente:", rpcError.message);
+            await (supabase as any)
+              .from("vendas")
+              .update({ situacao: "Concluída" })
+              .eq("id", grupo.venda_id);
+          }
+
+          // Para Delivery: atualiza status da entrega
           if (grupo.tipo_pedido === 'Delivery') {
             await supabase
               .from("entregas")
               .update({ status: 'pendente' } as any)
               .eq("venda_id", grupo.venda_id);
           }
+          toast.success("Pedido concluído! ✓");
         }
       }
 

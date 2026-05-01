@@ -252,6 +252,17 @@ export function Navbar() {
                           </div>
                           <span className="font-bold text-sm tracking-tight">Backup</span>
                         </Link>
+                        <Link
+                          to="/configuracoes"
+                          className={`flex items-center gap-3 p-2 rounded-[0.5rem] transition-all group mt-1 ${
+                            location.pathname === "/configuracoes" ? "bg-[#f97316] text-white" : "text-[#1e3a8a] hover:bg-[#fff7ed] hover:text-[#f97316]"
+                          }`}
+                        >
+                          <div className="w-8 h-8 flex items-center justify-center rounded-[0.5rem] bg-[#1e3a8a] text-white shadow-sm">
+                            <Settings size={16} />
+                          </div>
+                          <span className="font-bold text-sm tracking-tight">Configurações</span>
+                        </Link>
                         <a
                           href="/catalogo"
                           target="_blank"
@@ -411,6 +422,7 @@ export function Navbar() {
                   <div className="space-y-1">
                     <DrawerLink to="/usuarios" label="Usuários" icon={UserCog} color="#dc2626" active={location.pathname === "/usuarios"} onClick={() => setIsOpen(false)} />
                     <DrawerLink to="/auditoria" label="Auditoria" icon={Shield} color="#374151" active={location.pathname === "/auditoria"} onClick={() => setIsOpen(false)} />
+                    <DrawerLink to="/configuracoes" label="Configurações" icon={Settings} color="#1e3a8a" active={location.pathname === "/configuracoes"} onClick={() => setIsOpen(false)} />
                     <DrawerLink to="/backup" label="Backup de Dados" icon={Database} color="#f59e0b" active={location.pathname === "/backup"} onClick={() => setIsOpen(false)} />
                   </div>
                 </div>

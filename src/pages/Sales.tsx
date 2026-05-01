@@ -36,6 +36,7 @@ interface Venda {
     telefone: string;
   }[];
   pagamentos_venda?: PagamentoVenda[];
+  tipo_pedido?: string;
 }
 
 interface ItemVenda {
@@ -284,7 +285,7 @@ export default function Vendas() {
           ) : (
             pedidosPendentes.map((pedido) => {
               const minutos = Math.floor((Date.now() - new Date(pedido.criado_em).getTime()) / 60000);
-              const isDelivery = pedido.entregas && pedido.entregas.length > 0;
+              const isDelivery = pedido.tipo_pedido?.toLowerCase() === "delivery" || (pedido.entregas && pedido.entregas.length > 0);
               return (
                 <div key={pedido.id} className="card-metric border-l-4 border-orange-500">
                   <div className="flex items-start justify-between flex-wrap gap-3">

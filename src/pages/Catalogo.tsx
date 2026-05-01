@@ -100,6 +100,7 @@ export default function Catalogo() {
   // Success
   const [pedidoId, setPedidoId] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [globalTaxaEntrega, setGlobalTaxaEntrega] = useState(5); // Default fallback
 
   // ── Load data ─────────────────────────────────────────
   useEffect(() => {
@@ -107,6 +108,8 @@ export default function Catalogo() {
       const { data: produtosData } = await supabase.from("produtos").select("id, nome, preco, imagem_url, categoria_id").eq("ativo", true).order("nome");
       const { data: estoqueData } = await supabase.from("estoque").select("produto_id, saldo");
       const { data: categoriasData } = await supabase.from("categorias").select("*").order("nome");
+      const { data: formasPgtoData } = await supabase.from("formas_pagamento").select("*").order("nome");
+      
       if (produtosData) {
         const produtosComInfo = (produtosData as any[]).map(p => {
           const cat = (categoriasData || []).find(c => c.id === p.categoria_id);
@@ -119,7 +122,23 @@ export default function Catalogo() {
         setProducts(produtosComInfo);
       }
       if (categoriasData) setCategories(categoriasData as Category[]);
-      supabase.from("formas_pagamento").select("*").order("nome").then(({ data }) => setFormasPgto((data as FormasPgto[]) || []));
+      if (formasPgtoData) {
+        // Filtrar "Fiado" do catálogo online
+        setFormasPgto((formasPgtoData as FormasPgto[]).filter(f => !f.nome.toLowerCase().includes("fiado")));
+      }
+      
+      // Busca taxa de entrega global
+      const { data: configData } = await (supabase as any)
+        .from("configuracoes")
+        .select("valor")
+        .eq("chave", "taxa_entrega")
+        .maybeSingle();
+
+      if (configData) {
+        setGlobalTaxaEntrega(parseFloat(configData.valor));
+      } else {
+        setGlobalTaxaEntrega(5.00); // Default fallback
+      }
     }
     loadData();
   }, []);
@@ -148,7 +167,7 @@ export default function Catalogo() {
     setCart(prev => prev.map(i => i.product.id === id ? { ...i, quantity: i.quantity + delta } : i).filter(i => i.quantity > 0));
   
   const subtotal = cart.reduce((s, i) => s + i.product.preco * i.quantity, 0);
-  const taxaEntrega = orderType === "Delivery" ? 5 : 0; // Taxa fixa exemplo para o catálogo
+  const taxaEntrega = orderType === "Delivery" ? globalTaxaEntrega : 0;
   const total = subtotal + taxaEntrega;
   const totalItems = cart.reduce((s, i) => s + i.quantity, 0);
 
@@ -215,40 +234,31 @@ export default function Catalogo() {
         const { data: nC } = await supabase.from("clientes").insert({ nome: nome.trim(), telefone: telefone.trim(), endereco: endereco || null, complemento: complemento || null }).select("id").single();
         clienteId = nC?.id || null;
       }
+      
       const { isDinheiro } = getPgtoType();
       const obsCompleta = [observacoes, isDinheiro && troco ? `Troco para R$ ${troco}` : ""].filter(Boolean).join(" | ");
-      const { data: venda, error: e1 } = await supabase.from("vendas").insert({ 
-        nome_cliente: nome.trim(), 
-        cliente_id: clienteId, 
-        forma_pagamento_id: pgtoId, 
-        total: total, 
-        situacao: "Aguardando confirmação", 
-        tipo_pedido: orderType,
-        observacoes: obsCompleta || null 
-      } as any).select("id").single();
+
+      // Usando a RPC para persistir o pedido com segurança e debitar estoque
+      const { data: vendaId, error: e1 } = await (supabase as any).rpc("realizar_venda", {
+        p_itens: cart.map(i => ({ 
+          produto_id: i.product.id, 
+          quantidade: i.quantity, 
+          preco_unitario: i.product.preco, 
+          nome_produto: i.product.nome, 
+          status_cozinha: 'pendente' 
+        })),
+        p_pagamento_id: pgtoId,
+        p_observacao: obsCompleta || "",
+        p_cliente: nome.trim(),
+        p_cliente_id: clienteId,
+        p_tipo_pedido: orderType,
+        p_endereco: orderType === "Delivery" ? endereco : "",
+        p_telefone: telefone,
+        p_taxa_entrega: orderType === "Delivery" ? 5.00 : 0,
+        p_status: "Aguardando confirmação"
+      });
       
-      if (e1 || !venda) throw new Error("Erro ao registrar venda");
-      
-      await supabase.from("itens_venda").insert(cart.map(i => ({ 
-        venda_id: venda.id, 
-        produto_id: i.product.id, 
-        nome_produto: i.product.nome, 
-        quantidade: i.quantity, 
-        preco_unitario: i.product.preco, 
-        status_cozinha: 'pendente' 
-      })));
-      
-      if (orderType === "Delivery") {
-        await supabase.from("entregas").insert({ 
-          venda_id: venda.id, 
-          cliente_id: clienteId, 
-          endereco: endereco, 
-          complemento: complemento || null, 
-          telefone: telefone, 
-          taxa: taxaEntrega, 
-          status: "pendente" 
-        } as any);
-      }
+      if (e1 || !vendaId) throw new Error("Erro ao registrar venda: " + (e1?.message || "ID não retornado"));
       
       if (clienteId) {
         localStorage.setItem("cliente_id_marmitaria", clienteId);
@@ -256,7 +266,7 @@ export default function Catalogo() {
         localStorage.setItem("cliente_tel_marmitaria", telefone.trim());
       }
       
-      setPedidoId(venda.id); 
+      setPedidoId(vendaId); 
       setStep(4); 
       fetchHistorico();
     } catch (e: any) { alert("Erro: " + e.message); } finally { setSubmitting(false); }
@@ -264,6 +274,7 @@ export default function Catalogo() {
 
   function resetCheckout() {
     setCheckoutOpen(false); setStep(1); setCart([]); setObservacoes(""); setPgtoId(""); setTroco(""); setPixQr(""); setPixCopyCola(""); setPedidoId("");
+    setNome(""); setTelefone(""); setEndereco(""); setComplemento(""); setCep("");
     if (countdownRef.current) clearInterval(countdownRef.current);
   }
 
@@ -542,7 +553,11 @@ export default function Catalogo() {
             <button onClick={() => step > 1 && step < 4 ? setStep(step - 1) : resetCheckout()} className="w-10 h-10 rounded-full bg-gray-50 flex items-center justify-center text-gray-500">
               <ArrowLeft size={24} />
             </button>
-            <span className="text-xs font-black uppercase tracking-widest text-[#8B6550]">Passo {step} de 3</span>
+            {step < 4 ? (
+              <span className="text-xs font-black uppercase tracking-widest text-[#8B6550]">Passo {step} de 3</span>
+            ) : (
+              <span className="text-xs font-black uppercase tracking-widest text-[#8B6550]">Pedido Confirmado</span>
+            )}
             <div className="w-10"></div>
           </header>
 
@@ -644,18 +659,49 @@ export default function Catalogo() {
                 )}
 
                 {step === 3 && (
-                  <div className="space-y-4">
-                    <div className="grid grid-cols-1 gap-3">
-                      {formasPgto.map(f => (
+                  <div className="space-y-6">
+                    <div className="space-y-3">
+                      <h4 className="text-[10px] font-black uppercase tracking-widest text-[#8B6550] ml-1">Como deseja pagar?</h4>
+                      
+                      {/* Opção PIX (Automática) */}
+                      {formasPgto.filter(f => f.nome.toLowerCase().includes("pix")).map(f => (
                         <button 
                           key={f.id} 
                           onClick={() => setPgtoId(f.id)}
                           className={`w-full p-5 rounded-3xl border-2 transition-all flex items-center justify-between ${pgtoId === f.id ? "border-orange-600 bg-orange-50/50" : "border-gray-100"}`}
                         >
-                          <span className="font-black text-sm">{f.nome}</span>
+                          <div className="flex items-center gap-4">
+                            <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${pgtoId === f.id ? "bg-orange-600 text-white" : "bg-gray-100 text-gray-500"}`}>
+                              <QrCode size={20} />
+                            </div>
+                            <div className="text-left">
+                              <span className="font-black text-sm block tracking-tight">Pagar agora com PIX</span>
+                              <span className="text-[10px] text-green-600 font-bold">Confirmação instantânea</span>
+                            </div>
+                          </div>
                           {pgtoId === f.id && <CheckCircle2 className="text-orange-600" size={20} />}
                         </button>
                       ))}
+
+                      {/* Outras formas (Pagar na entrega/retirada) */}
+                      <div className="pt-4 mt-4 border-t border-dashed border-gray-200">
+                        <h4 className="text-[10px] font-black uppercase tracking-widest text-[#8B6550] ml-1 mb-3">Pagar na {orderType === "Delivery" ? "Entrega" : "Retirada"}</h4>
+                        <div className="grid grid-cols-1 gap-3">
+                          {formasPgto.filter(f => !f.nome.toLowerCase().includes("pix")).map(f => (
+                            <button 
+                              key={f.id} 
+                              onClick={() => setPgtoId(f.id)}
+                              className={`w-full p-4 rounded-2xl border-2 transition-all flex items-center justify-between ${pgtoId === f.id ? "border-orange-600 bg-orange-50/50" : "border-gray-100"}`}
+                            >
+                              <div className="flex items-center gap-3">
+                                <Wallet size={18} className={pgtoId === f.id ? "text-orange-600" : "text-gray-400"} />
+                                <span className="font-bold text-sm tracking-tight">{f.nome}</span>
+                              </div>
+                              {pgtoId === f.id && <CheckCircle2 className="text-orange-600" size={18} />}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
                     </div>
 
                     {getPgtoType().isPix && (
@@ -669,7 +715,7 @@ export default function Catalogo() {
                           <div className="flex flex-col items-center">
                             <span className="text-[10px] font-black uppercase tracking-[0.2em] mb-4 text-orange-400">Escaneie o QR Code</span>
                             <div className="bg-white p-4 rounded-3xl shadow-sm mb-4 border border-gray-100">
-                              <img src={`data:image/png;base64,${pixQr}`} className="w-48 h-48" />
+                              <img src={`data:image/png;base64,${pixQr}`} className="w-48 h-48" alt="QR Code" />
                             </div>
                             <Countdown seconds={countdown} />
                             <button 
@@ -691,7 +737,7 @@ export default function Catalogo() {
                     )}
                     
                     {getPgtoType().isDinheiro && (
-                      <div className="mt-4 p-4 bg-gray-50 rounded-2xl">
+                      <div className="mt-4 p-4 bg-gray-50 rounded-2xl animate-in fade-in slide-in-from-top-2">
                         <label className="text-xs font-bold text-gray-500 mb-2 block">Precisa de troco para quanto?</label>
                         <input className="w-full bg-white border-none rounded-xl py-3 px-4 outline-none focus:ring-1 ring-orange-200" value={troco} onChange={e => setTroco(e.target.value)} placeholder="Deixe vazio se não precisar" />
                       </div>

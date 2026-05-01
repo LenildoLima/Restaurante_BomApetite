@@ -236,6 +236,7 @@ export default function NewSale() {
   const [address, setAddress] = useState("");
   const [complement, setComplement] = useState("");
   const [phone, setPhone] = useState("");
+  const [globalTaxaEntrega, setGlobalTaxaEntrega] = useState(0);
 
   const [clientQuery, setClientQuery] = useState("");
   const [clientSuggestions, setClientSuggestions] = useState<Cliente[]>([]);
@@ -357,6 +358,19 @@ export default function NewSale() {
     setProducts(processedProducts);
     setCategories((catRes.data as Category[]) || []);
     setPaymentMethods((payRes.data as PaymentMethod[]) || []);
+
+    // Busca taxa de entrega global
+    const { data: configData } = await (supabase as any)
+      .from("configuracoes")
+      .select("valor")
+      .eq("chave", "taxa_entrega")
+      .maybeSingle();
+
+    if (configData) {
+      setGlobalTaxaEntrega(parseFloat(configData.valor));
+    } else {
+      setGlobalTaxaEntrega(5.00); // Default fallback
+    }
   }
 
   useEffect(() => {
@@ -1087,7 +1101,12 @@ export default function NewSale() {
                 <Button 
                   variant={orderType === "Delivery" ? "default" : "outline"}
                   className="flex-1 py-8 flex flex-col gap-2 rounded-2xl h-auto"
-                  onClick={() => { setOrderType("Delivery"); setIdentification(""); clearClient(); }}
+                  onClick={() => { 
+                    setOrderType("Delivery"); 
+                    setIdentification(""); 
+                    clearClient();
+                    if (globalTaxaEntrega > 0) setDeliveryFee(globalTaxaEntrega);
+                  }}
                 >
                   <Plus className="w-5 h-5" />
                   <span className="text-[10px] font-bold uppercase">Delivery</span>
