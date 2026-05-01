@@ -108,7 +108,7 @@ export default function EsqueciSenha() {
               marginBottom: "1rem",
             }}
           >
-            🍔
+            <img src="/logo-bom-apetite.png" alt="Logo" style={{ width: "100%", height: "100%", objectFit: "contain" }} />
           </div>
           <h1
             style={{
@@ -120,10 +120,10 @@ export default function EsqueciSenha() {
               marginBottom: "0.25rem",
             }}
           >
-            LaunchApp
+            Bom Apetite
           </h1>
           <p style={{ color: "#9ca3af", fontSize: "0.9rem", fontWeight: 500 }}>
-            Gestão de Lanchonete
+            Gestão de Marmitaria
           </p>
         </div>
 

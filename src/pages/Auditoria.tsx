@@ -30,7 +30,7 @@ export default function Auditoria() {
       navigate("/nova-venda");
       return;
     }
-    document.title = "Auditoria | LaunchApp";
+    document.title = "Auditoria | Bom Apetite";
     const timeout = setTimeout(() => {
       fetchLogs();
     }, 300); // Debounce search

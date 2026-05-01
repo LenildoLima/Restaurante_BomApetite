@@ -27,7 +27,7 @@ export function ProtectedRoute({ children, apenasAdmin = false }: ProtectedRoute
               animation: "pulse 1.5s infinite",
             }}
           >
-            🍔
+            <img src="/logo-bom-apetite.png" alt="Logo" style={{ width: 48, height: 48, objectFit: "contain" }} />
           </div>
           <p style={{ color: "#9ca3af", fontWeight: 500 }}>Carregando...</p>
         </div>

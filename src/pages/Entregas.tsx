@@ -104,8 +104,7 @@ export default function Entregas() {
         .from("entregas")
         .select(`
           *,
-          vendas (*),
-          entregadores (*)
+          venda:venda_id (*)
         `);
 
       if (filtroStatus !== "todas") {
@@ -123,24 +122,26 @@ export default function Entregas() {
       const formatado = await Promise.all((data || []).map(async (e: any) => {
         const { data: itens } = await (supabase as any)
           .from("itens_venda")
-          .select("nome_produto, quantidade, preco_unitario, status_cozinha")
+          .select("*")
           .eq("venda_id", e.venda_id);
 
         return {
           ...e,
-          entregador: e.entregadores,
-          venda: e.vendas,
+          venda: e.venda,
           itens: itens || []
         };
       }));
 
-      // Filtrar apenas pedidos que já foram finalizados na cozinha (ou não têm itens)
+      // Filtrar apenas pedidos Delivery que já foram finalizados na cozinha (ou não têm itens)
       const liberadas = formatado.filter(e => {
+        // Filtro de tipo: Apenas Delivery
+        if (e.venda?.tipo_pedido !== 'Delivery' && e.venda?.tipo_pedido !== 'Entrega') return false;
+
         if (!e.itens || e.itens.length === 0) return true;
-        // Só mostra se TODOS os itens estiverem 'entregue' ou 'cancelado' (case-insensitive)
+        // Só mostra se TODOS os itens estiverem 'pronto', 'entregue', 'cancelado' ou 'concluído'
         return e.itens.every((i: any) => {
           const s = (i.status_cozinha || "").toLowerCase();
-          return s === 'entregue' || s === 'cancelado' || s === 'concluído';
+          return s === 'pronto' || s === 'entregue' || s === 'cancelado' || s === 'concluído';
         });
       });
 

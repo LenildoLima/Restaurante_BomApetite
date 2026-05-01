@@ -28,6 +28,13 @@ CREATE POLICY "Usuario pode atualizar proprios dados"
   TO authenticated
   USING (auth.uid() = id);
 
+-- Política: permite que o usuário insira o próprio perfil após o cadastro
+CREATE POLICY "Usuarios podem inserir o proprio perfil"
+  ON public.usuarios
+  FOR INSERT
+  TO authenticated
+  WITH CHECK (auth.uid() = id);
+
 -- Índice para busca por email
 CREATE INDEX IF NOT EXISTS usuarios_email_idx ON public.usuarios (email);
 

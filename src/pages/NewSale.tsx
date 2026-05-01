@@ -2,7 +2,7 @@ import { useEffect, useState, useRef } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { formatCurrency, getCategoriaBadgeClass } from "@/lib/format";
-import { Search, ShoppingCart, Plus, Minus, X, UserPlus, Check, Printer } from "lucide-react";
+import { Search, ShoppingCart, Plus, Minus, X, UserPlus, Check, Printer, User } from "lucide-react";
 import { registrarAuditoria } from "@/lib/auditoria";
 import { useAuth } from "@/hooks/use-auth";
 import { Input } from "@/components/ui/input";
@@ -36,7 +36,7 @@ interface Cliente { id: string; nome: string; telefone: string | null; endereco:
 interface CartItem { product: Product; quantity: number; }
 
 interface ReceiptData {
-  orderType: "Local" | "Entrega";
+  orderType: "Presencial" | "Retirada" | "Delivery";
   identification: string;
   cart: CartItem[];
   subtotal: number;
@@ -71,11 +71,11 @@ function Receipt({ data }: { data: ReceiptData }) {
   const sep = "─".repeat(32);
   const sepScissors = "- - - - - - - - - - - ✂ - - - - - - - - - - -";
 
-  if (data.orderType === "Local") {
+  if (data.orderType !== "Delivery") {
     return (
       <div id="receipt-content" style={{ fontFamily: "monospace", fontSize: 12, width: "100%", maxWidth: 300, padding: "8px 0" }}>
-        <div style={{ textAlign: "center", fontWeight: "bold" }}>LaunchApp</div>
-        <div style={{ textAlign: "center", fontSize: 10 }}>Gestão de Lanchonete</div>
+        <div style={{ textAlign: "center", fontWeight: "bold" }}>Bom Apetite</div>
+        <div style={{ textAlign: "center", fontSize: 10 }}>Gestão de Marmitaria</div>
         <div style={{ textAlign: "center", fontSize: 10 }}>{data.dataHora}</div>
         <div>{sep}</div>
         <div style={{ textAlign: "center", fontWeight: "bold", fontSize: 14, letterSpacing: 2 }}>COMANDA</div>
@@ -114,7 +114,7 @@ function Receipt({ data }: { data: ReceiptData }) {
 
         {data.notes && <><div>{sep}</div><div style={{ fontSize: 11 }}>Obs: {data.notes}</div></>}
         <div>{sep}</div>
-        <div style={{ textAlign: "center" }}>Bom apetite! 🍔</div>
+        <div style={{ textAlign: "center", display: "flex", justifyContent: "center", alignItems: "center", gap: 8 }}>Bom apetite! <img src="/logo-bom-apetite.png" alt="Logo" style={{ width: 24, height: 24 }} /></div>
       </div>
     );
   }
@@ -130,7 +130,7 @@ function Receipt({ data }: { data: ReceiptData }) {
       <div style={{ textAlign: "center", fontSize: 10 }}>Gestão de Lanchonete</div>
       <div style={{ textAlign: "center", fontSize: 10 }}>{data.dataHora}</div>
       <div>{sep}</div>
-      <div style={{ textAlign: "center", fontWeight: "bold", fontSize: 13, letterSpacing: 1 }}>PEDIDO DELIVERY - COZINHA</div>
+      <div style={{ textAlign: "center", fontWeight: "bold", fontSize: 13, letterSpacing: 1 }}>PEDIDO {data.orderType.toUpperCase()} - COZINHA</div>
       <div>{sep}</div>
       {data.cart.map((i, idx) => (
         <div key={idx} style={{ fontWeight: "bold" }}>{i.quantity}x {i.product.nome}</div>
@@ -146,7 +146,7 @@ function Receipt({ data }: { data: ReceiptData }) {
       <div style={{ textAlign: "center", fontSize: 10 }}>Gestão de Lanchonete</div>
       <div style={{ textAlign: "center", fontSize: 10 }}>{data.dataHora}</div>
       <div>{sep}</div>
-      <div style={{ textAlign: "center", fontWeight: "bold", fontSize: 13, letterSpacing: 1 }}>PEDIDO DELIVERY - ENTREGA</div>
+      <div style={{ textAlign: "center", fontWeight: "bold", fontSize: 13, letterSpacing: 1 }}>PEDIDO {data.orderType.toUpperCase()} - ENTREGA</div>
       <div>{sep}</div>
       <div style={{ fontWeight: "bold" }}>{data.clienteNome}</div>
       {data.clienteTelefone && <div>Tel: {data.clienteTelefone}</div>}
@@ -226,7 +226,7 @@ export default function NewSale() {
   const [modalOpen, setModalOpen] = useState(false);
   const [step, setStep] = useState(1);
 
-  const [orderType, setOrderType] = useState<"Local" | "Entrega">("Local");
+  const [orderType, setOrderType] = useState<"Presencial" | "Retirada" | "Delivery">("Presencial");
   const [identification, setIdentification] = useState("");
   const [deliveryFee, setDeliveryFee] = useState(0);
   const [address, setAddress] = useState("");
@@ -245,11 +245,24 @@ export default function NewSale() {
   const [newClientTelefone, setNewClientTelefone] = useState("");
   const [newClientEndereco, setNewClientEndereco] = useState("");
   const [newClientComplemento, setNewClientComplemento] = useState("");
-  const [isSavingClient, setIsSavingClient] = useState(false);
 
   const [paymentMethodId, setPaymentMethodId] = useState("");
   const [notes, setNotes] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const maskPhone = (v: string) => {
+    let r = v.replace(/\D/g, "");
+    if (r.length > 11) r = r.substring(0, 11);
+    if (r.length > 10) {
+      r = r.replace(/^(\d{2})(\d{5})(\d{4}).*/, "($1) $2-$3");
+    } else if (r.length > 5) {
+      r = r.replace(/^(\d{2})(\d{4})(\d{0,4}).*/, "($1) $2-$3");
+    } else if (r.length > 2) {
+      r = r.replace(/^(\d{2})(\d{0,5}).*/, "($1) $2");
+    } else {
+      r = r.replace(/^(\d*)/, "$1");
+    }
+    return r;
+  };
   const [trocoValor, setTrocoValor] = useState("");
   const [noTroco, setNoTroco] = useState(false);
 
@@ -281,7 +294,7 @@ export default function NewSale() {
 
   useEffect(() => {
     if (linkedVendaId && linkedCliente) {
-      setOrderType("Local");
+      setOrderType("Presencial");
       setIdentification(linkedCliente);
       // Pequeno delay para o toast não sumir com o carregamento inicial
       setTimeout(() => {
@@ -365,7 +378,7 @@ export default function NewSale() {
   }
 
   const subtotal = cart.reduce((s, i) => s + i.product.preco * i.quantity, 0);
-  const totalGeral = subtotal + (orderType === "Entrega" ? deliveryFee : 0);
+  const totalGeral = subtotal + (orderType === "Delivery" ? deliveryFee : 0);
 
   const filtered = products.filter((p) => {
     const matchSearch = p.nome.toLowerCase().includes(search.toLowerCase());
@@ -374,9 +387,35 @@ export default function NewSale() {
   });
 
   function resetAll() {
-    setCart([]); setStep(1); setOrderType("Local"); setIdentification(""); setDeliveryFee(0);
+    setCart([]); setStep(1); setOrderType("Presencial"); setIdentification(""); setDeliveryFee(0);
     setAddress(""); setComplement(""); setPhone(""); clearClient();
     setPaymentMethodId(""); setNotes(""); setTrocoValor(""); setNoTroco(false);
+  }
+
+  async function ensureCliente(nome: string, telefone: string) {
+    if (!telefone.trim() || !nome.trim()) return null;
+    try {
+      const { data: existing, error: searchError } = await supabase
+        .from("clientes")
+        .select("id")
+        .eq("telefone", telefone)
+        .maybeSingle();
+
+      if (searchError) throw searchError;
+      if (existing) return existing.id;
+
+      const { data: newClient, error: insertError } = await supabase
+        .from("clientes")
+        .insert({ nome, telefone })
+        .select("id")
+        .single();
+
+      if (insertError) throw insertError;
+      return newClient.id;
+    } catch (err) {
+      console.error("Erro ao gerenciar cliente:", err);
+      return null;
+    }
   }
 
   async function handleConfirmSale() {
@@ -394,7 +433,7 @@ export default function NewSale() {
           const { data: resData, error: pixError } = await (supabase as any).functions.invoke('gerar-pix', {
             body: { 
               valor: Number(totalGeral), 
-              descricao: `Pedido LaunchApp - ${cart.length} itens` 
+              descricao: `Pedido Bom Apetite - ${cart.length} itens` 
             }
           });
           
@@ -419,9 +458,16 @@ export default function NewSale() {
         }
       }
 
-      const nomeCliente = orderType === "Entrega" ? (selectedClient?.nome || "") : (identification || "");
+      const nomeCliente = selectedClient?.nome || newClientNome || identification || "";
+      const telefoneCliente = selectedClient?.telefone || newClientTelefone || phone || "";
+
+      let finalClienteId = (selectedClient && selectedClient.id !== 'temp') ? selectedClient.id : null;
+      if (!finalClienteId && (orderType === "Retirada" || orderType === "Delivery") && telefoneCliente) {
+        finalClienteId = await ensureCliente(nomeCliente, telefoneCliente);
+      }
+
       const isDinheiro = paymentMethod?.nome?.toLowerCase().includes("dinheiro") ?? false;
-      const trocoInfo = (orderType === "Entrega" && isDinheiro && !noTroco && trocoValor)
+      const trocoInfo = (orderType === "Delivery" && isDinheiro && !noTroco && trocoValor)
         ? `Troco para R$ ${parseFloat(trocoValor).toFixed(2).replace(".", ",")}` : "";
       const obsCompleta = [trocoInfo, notes].filter(Boolean).join(" | ");
 
@@ -430,16 +476,17 @@ export default function NewSale() {
           produto_id: i.product.id, 
           quantidade: i.quantity, 
           preco_unitario: i.product.preco,
-          nome_produto: i.product.nome
+          nome_produto: i.product.nome,
+          status_cozinha: orderType === "Presencial" ? "concluído" : "pendente"
         })),
         p_pagamento_id: paymentMethodId,
         p_observacao: obsCompleta || "",
         p_cliente: nomeCliente,
-        p_cliente_id: selectedClient?.id || null,
+        p_cliente_id: finalClienteId,
         p_tipo_pedido: orderType,
-        p_endereco: orderType === "Entrega" ? address : "",
-        p_telefone: orderType === "Entrega" ? phone : "",
-        p_taxa_entrega: orderType === "Entrega" ? parseFloat(deliveryFee.toString()) : 0,
+        p_endereco: orderType === "Delivery" ? address : "",
+        p_telefone: orderType === "Presencial" ? "" : telefoneCliente,
+        p_taxa_entrega: orderType === "Delivery" ? parseFloat(deliveryFee.toString()) : 0,
         p_status: "Concluída"
       });
 
@@ -525,21 +572,30 @@ export default function NewSale() {
   async function handleSaveComanda() {
     setIsSubmitting(true);
     try {
+      const nomeCliente = selectedClient?.nome || newClientNome || identification || "";
+      const telefoneCliente = selectedClient?.telefone || newClientTelefone || phone || "";
+      
+      let finalClienteId = (selectedClient && selectedClient.id !== 'temp') ? selectedClient.id : null;
+      if (!finalClienteId && (orderType === "Retirada" || orderType === "Delivery") && telefoneCliente) {
+        finalClienteId = await ensureCliente(nomeCliente, telefoneCliente);
+      }
+
       const { error } = await (supabase as any).rpc("realizar_venda", {
         p_itens: cart.map((i: any) => ({ 
           produto_id: i.product.id, 
           quantidade: i.quantity, 
           preco_unitario: i.product.preco,
-          nome_produto: i.product.nome
+          nome_produto: i.product.nome,
+          status_cozinha: orderType === "Presencial" ? "concluído" : "pendente"
         })),
         p_pagamento_id: null,
         p_observacao: notes || "",
-        p_cliente: identification || "",
-        p_cliente_id: null,
-        p_tipo_pedido: "Local",
-        p_endereco: "",
-        p_telefone: "",
-        p_taxa_entrega: 0,
+        p_cliente: nomeCliente,
+        p_cliente_id: finalClienteId,
+        p_tipo_pedido: orderType,
+        p_endereco: orderType === "Delivery" ? address : "",
+        p_telefone: orderType === "Presencial" ? "" : telefoneCliente,
+        p_taxa_entrega: orderType === "Delivery" ? parseFloat(deliveryFee.toString()) : 0,
         p_status: "Em Aberto"
       });
 
@@ -549,7 +605,7 @@ export default function NewSale() {
       const dataHora = now.toLocaleDateString("pt-BR") + " " + now.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
       
       setReceiptData({
-        orderType: "Local",
+        orderType: orderType,
         identification: identification || "Comanda Extra",
         cart: [...cart],
         subtotal,
@@ -575,8 +631,8 @@ export default function NewSale() {
           acao: "Comanda aberta",
           detalhes: {
             total: subtotal,
-            tipo_pedido: "Local",
-            cliente_nome: identification,
+            tipo_pedido: orderType,
+            cliente_nome: identification || selectedClient?.nome,
             quantidade_itens: cart.length
           }
         });
@@ -586,7 +642,7 @@ export default function NewSale() {
           tipo: "estoque",
           acao: "Baixa de estoque por comanda",
           detalhes: {
-            venda_tipo: "Local",
+            venda_tipo: orderType,
             itens: cart.map(i => `${i.quantity}x ${i.product.nome}`).join(", ")
           }
         });
@@ -913,30 +969,38 @@ export default function NewSale() {
           {/* PASSO 1 */}
           {step === 1 && (
             <div className="space-y-4">
-              <div>
-                <Label className="mb-2 block font-semibold">Tipo de Pedido</Label>
-                <div className="grid grid-cols-2 gap-2">
-                  {(["Local", "Entrega"] as const).map((type) => (
-                    <button key={type} onClick={() => { setOrderType(type); clearClient(); setIdentification(""); }}
-                      className={`p-3 rounded-lg text-sm font-semibold border-2 transition-colors ${orderType === type ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground hover:bg-muted"}`}>
-                      {type === "Local" ? "🍽️ Consumir no Local" : "🛵 Entrega"}
-                    </button>
-                  ))}
-                </div>
+              <h3 className="font-bold text-sm text-muted-foreground uppercase tracking-wider mb-2">Selecione o Tipo</h3>
+              <div className="grid grid-cols-3 gap-2">
+                <Button 
+                  variant={orderType === "Presencial" ? "default" : "outline"}
+                  className="flex-1 py-8 flex flex-col gap-2 rounded-2xl h-auto"
+                  onClick={() => { setOrderType("Presencial"); setIdentification(""); clearClient(); }}
+                >
+                  <User className="w-5 h-5" />
+                  <span className="text-[10px] font-bold uppercase">Presencial</span>
+                </Button>
+                <Button 
+                  variant={orderType === "Retirada" ? "default" : "outline"}
+                  className="flex-1 py-8 flex flex-col gap-2 rounded-2xl h-auto"
+                  onClick={() => { setOrderType("Retirada"); setIdentification(""); clearClient(); }}
+                >
+                  <ShoppingCart className="w-5 h-5" />
+                  <span className="text-[10px] font-bold uppercase">Retirada</span>
+                </Button>
+                <Button 
+                  variant={orderType === "Delivery" ? "default" : "outline"}
+                  className="flex-1 py-8 flex flex-col gap-2 rounded-2xl h-auto"
+                  onClick={() => { setOrderType("Delivery"); setIdentification(""); clearClient(); }}
+                >
+                  <Plus className="w-5 h-5" />
+                  <span className="text-[10px] font-bold uppercase">Delivery</span>
+                </Button>
               </div>
 
-              {orderType === "Local" && (
-                <div className="animate-in fade-in slide-in-from-top-2 duration-200">
-                  <Label>Identificação (opcional)</Label>
-                  <input className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring mt-1"
-                    value={identification} onChange={(e) => setIdentification(e.target.value)} placeholder="Ex: Mesa 3, João, Balcão..." />
-                </div>
-              )}
-
-              {orderType === "Entrega" && (
+              {(orderType === "Retirada" || orderType === "Delivery") && (
                 <div className="space-y-3 animate-in fade-in slide-in-from-top-2 duration-200">
-                  <div ref={clientSearchRef} className="relative">
-                    <Label className="mb-1 block">Cliente</Label>
+                  <Label className="text-xs font-bold text-muted-foreground uppercase tracking-widest">Cliente</Label>
+                  <div className="relative" ref={clientSearchRef}>
                     {selectedClient ? (
                       <div className="flex items-center gap-2 p-2.5 rounded-lg border border-primary/40 bg-primary/5">
                         <Check className="w-4 h-4 text-primary flex-shrink-0" />
@@ -950,82 +1014,142 @@ export default function NewSale() {
                       <>
                         <div className="relative">
                           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                          <input className="flex h-10 w-full rounded-md border border-input bg-background pl-9 pr-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                            value={clientQuery} onChange={(e) => { setClientQuery(e.target.value); setShowNewClientForm(false); }} placeholder="Buscar por nome ou telefone..." autoComplete="off" />
+                          <Input 
+                            placeholder="Buscar por nome ou celular..." 
+                            value={clientQuery}
+                            onChange={(e) => {
+                              setClientQuery(e.target.value);
+                              if (!showSuggestions && e.target.value.length > 0) setShowSuggestions(true);
+                            }}
+                            className="pl-9 h-12 rounded-xl"
+                          />
                         </div>
-                        {showSuggestions && clientSuggestions.length > 0 && (
-                          <div className="absolute z-50 w-full mt-1 bg-card border border-border rounded-lg shadow-xl overflow-hidden">
-                            {clientSuggestions.map((c) => (
-                              <button key={c.id} onClick={() => selectClient(c)} className="w-full text-left px-3 py-2.5 hover:bg-muted transition-colors border-b border-border/50 last:border-0">
-                                <p className="text-sm font-semibold">{c.nome}</p>
-                                {c.telefone && <p className="text-xs text-muted-foreground">{c.telefone}</p>}
-                              </button>
-                            ))}
+                        
+                        {showSuggestions && (
+                          <div className="absolute z-50 left-0 right-0 top-full mt-1 bg-white border border-border rounded-xl shadow-xl overflow-hidden max-h-60 overflow-y-auto">
+                            {isSearchingClient ? (
+                              <div className="p-4 text-center text-sm text-muted-foreground">Buscando...</div>
+                            ) : clientSuggestions.length > 0 ? (
+                              <>
+                                {clientSuggestions.map((c) => (
+                                  <button key={c.id} onClick={() => selectClient(c)} className="w-full p-3 text-left hover:bg-muted flex flex-col border-b last:border-0">
+                                    <span className="font-bold text-sm text-slate-800">{c.nome}</span>
+                                    {c.telefone && <span className="text-xs text-muted-foreground">{c.telefone}</span>}
+                                  </button>
+                                ))}
+                                <button 
+                                  onClick={() => { setShowSuggestions(false); setShowNewClientForm(true); setNewClientNome(clientQuery); }}
+                                  className="w-full p-3 text-center bg-slate-50 hover:bg-slate-100 text-primary text-xs font-bold border-t"
+                                >
+                                  + CADASTRAR NOVO CLIENTE
+                                </button>
+                              </>
+                            ) : (
+                              <div className="p-4 text-center">
+                                <p className="text-sm text-muted-foreground mb-3">Cliente não encontrado</p>
+                                <Button size="sm" variant="default" onClick={() => { setShowSuggestions(false); setShowNewClientForm(true); setNewClientNome(clientQuery); }} className="w-full bg-primary hover:bg-primary/90">
+                                  + Criar "{clientQuery}"
+                                </Button>
+                              </div>
+                            )}
                           </div>
-                        )}
-                        {!showNewClientForm && (
-                          <button type="button" onClick={() => { setShowSuggestions(false); setShowNewClientForm(true); setNewClientNome(clientQuery); }}
-                            className="mt-1.5 flex items-center gap-1.5 text-xs text-primary hover:underline font-medium">
-                            <UserPlus className="w-3.5 h-3.5" />+ Cadastrar novo cliente
-                          </button>
                         )}
                       </>
                     )}
 
                     {showNewClientForm && !selectedClient && (
-                      <div className="mt-2 p-3 rounded-lg border border-border bg-muted/30 space-y-2 animate-in fade-in duration-200">
-                        <p className="text-xs font-bold text-muted-foreground uppercase tracking-wide">Novo Cliente</p>
-                        {[{ val: newClientNome, set: setNewClientNome, ph: "Nome *" }, { val: newClientTelefone, set: setNewClientTelefone, ph: "Telefone" }, { val: newClientEndereco, set: setNewClientEndereco, ph: "Endereço" }, { val: newClientComplemento, set: setNewClientComplemento, ph: "Complemento" }].map(({ val, set, ph }) => (
-                          <input key={ph} className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                            placeholder={ph} value={val} onChange={(e) => set(e.target.value)} />
-                        ))}
+                      <div className="mt-2 p-4 rounded-xl border-2 border-dashed border-primary/30 bg-primary/5 space-y-4 animate-in fade-in zoom-in-95 duration-200">
+                        <div className="flex items-center justify-between">
+                          <p className="text-xs font-black text-primary uppercase tracking-widest">Informações do Novo Cliente</p>
+                          <button onClick={() => setShowNewClientForm(false)} className="text-muted-foreground hover:text-foreground"><X size={14} /></button>
+                        </div>
+                        <div className="space-y-3">
+                          <div className="space-y-1">
+                            <Label className="text-[10px] font-bold uppercase text-muted-foreground">Nome Completo *</Label>
+                            <Input 
+                              placeholder="Nome do cliente..." 
+                              value={newClientNome} 
+                              onChange={(e) => setNewClientNome(e.target.value)} 
+                              className="h-10 bg-background"
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <Label className="text-[10px] font-bold uppercase text-muted-foreground">Telefone / WhatsApp *</Label>
+                            <Input 
+                              placeholder="(00) 00000-0000" 
+                              value={newClientTelefone} 
+                              onChange={(e) => setNewClientTelefone(maskPhone(e.target.value))} 
+                              className="h-10 bg-background"
+                            />
+                          </div>
+                        </div>
                         <div className="flex gap-2 pt-1">
-                          <Button variant="outline" size="sm" onClick={() => setShowNewClientForm(false)} className="flex-1">Cancelar</Button>
-                          <Button size="sm" onClick={handleSaveNewClient} disabled={isSavingClient} className="flex-1 bg-primary text-primary-foreground">{isSavingClient ? "Salvando..." : "Cadastrar"}</Button>
+                          <Button 
+                            size="sm" 
+                            onClick={() => {
+                              if (!newClientNome.trim() || !newClientTelefone.trim()) {
+                                toast.error("Preencha nome e telefone");
+                                return;
+                              }
+                              setSelectedClient({ 
+                                id: 'temp', 
+                                nome: newClientNome, 
+                                telefone: newClientTelefone, 
+                                endereco: null, 
+                                complemento: null 
+                              });
+                              setShowNewClientForm(false);
+                            }} 
+                            className="w-full bg-primary text-primary-foreground font-bold"
+                          >
+                            Confirmar Dados
+                          </Button>
                         </div>
                       </div>
                     )}
                   </div>
 
-                  {selectedClient && (
-                    <div className="space-y-2">
-                      <div>
-                        <Label>Endereço de Entrega</Label>
-                        <input className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring mt-1"
-                          value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Rua, número, bairro..." />
-                      </div>
+                  {orderType === "Delivery" && (
+                    <div className="space-y-2 pt-2">
+                      <Label className="text-xs font-bold text-muted-foreground uppercase tracking-widest italic opacity-60">Dados da Entrega</Label>
                       <div className="grid grid-cols-2 gap-2">
-                        <div>
-                          <Label>Complemento</Label>
-                          <input className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring mt-1"
-                            value={complement} onChange={(e) => setComplement(e.target.value)} placeholder="Apto, bloco..." />
+                        <div className="col-span-2">
+                          <Input value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Endereço: Rua, nº, bairro..." className="h-10 rounded-xl" />
                         </div>
-                        <div>
-                          <Label>Telefone</Label>
-                          <input className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring mt-1"
-                            value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="(00) 00000-0000" />
-                        </div>
+                        <Input value={complement} onChange={(e) => setComplement(e.target.value)} placeholder="Bloco, apto..." className="h-10 rounded-xl" />
+                        <Input value={phone} onChange={(e) => setPhone(maskPhone(e.target.value))} placeholder="Telefone..." className="h-10 rounded-xl" />
+                      </div>
+                      <div className="pt-1">
+                        <Label className="text-[10px] font-black uppercase text-muted-foreground/70">Taxa de Entrega</Label>
+                        <Input type="number" value={deliveryFee} onChange={(e) => setDeliveryFee(parseFloat(e.target.value) || 0)} className="h-10 rounded-xl" placeholder="R$ 0,00" />
                       </div>
                     </div>
                   )}
 
-                  <div>
-                    <Label>Taxa de Entrega (R$)</Label>
-                    <input type="number" step="0.01" min="0"
-                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring mt-1"
-                      value={deliveryFee} onChange={(e) => setDeliveryFee(parseFloat(e.target.value) || 0)} placeholder="0,00" />
-                  </div>
+                  {!selectedClient && !showNewClientForm && (
+                     <div className="pt-1">
+                        <Label className="text-xs font-bold text-muted-foreground uppercase tracking-widest italic opacity-60">Identificação/Obs (Opcional)</Label>
+                        <Input value={identification} onChange={(e) => setIdentification(e.target.value)} placeholder="Ex: Mesa 05, Retirada às 12h..." className="h-10 rounded-xl mt-1" />
+                     </div>
+                  )}
                 </div>
               )}
 
-              <div className="flex justify-end gap-2 pt-2">
+              {orderType === "Presencial" && (
+                <div className="space-y-2 animate-in fade-in slide-in-from-top-2 duration-200">
+                  <Label className="text-xs font-bold text-muted-foreground uppercase tracking-widest italic opacity-60">Identificação (Opcional)</Label>
+                  <Input value={identification} onChange={(e) => setIdentification(e.target.value)} placeholder="Ex: Mesa 10, Comanda, Nome..." className="h-12 rounded-xl" />
+                </div>
+              )}
+
+              <div className="flex justify-end gap-2 pt-4 border-t border-border mt-4">
                 <Button variant="outline" onClick={() => setModalOpen(false)}>Cancelar</Button>
                 {linkedVendaId ? (
                    <Button onClick={handleAddItemsToExisting} disabled={isSubmitting} className="bg-indigo-600 text-white hover:bg-indigo-700">
                      {isSubmitting ? "Salvando..." : "Confirmar Adição"}
                    </Button>
                 ) : (
-                  <Button onClick={() => setStep(2)} className="bg-primary text-primary-foreground hover:bg-primary/90">Próximo →</Button>
+                  <Button onClick={() => setStep(2)} className="bg-primary text-primary-foreground hover:bg-primary/90 min-w-[120px]">Próximo →</Button>
                 )}
               </div>
             </div>
@@ -1034,37 +1158,44 @@ export default function NewSale() {
           {/* PASSO 2 */}
           {step === 2 && (
             <div className="space-y-4">
-              <div className="space-y-1.5">
+              <div className="space-y-1.5 max-h-48 overflow-y-auto pr-2 scrollbar-thin">
                 {cart.map((i) => (
                   <div key={i.product.id} className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">{i.quantity}x {i.product.nome}</span>
-                    <span className="font-medium">{formatCurrency(i.product.preco * i.quantity)}</span>
+                    <span className="text-muted-foreground font-medium">{i.quantity}x {i.product.nome}</span>
+                    <span className="font-bold">{formatCurrency(i.product.preco * i.quantity)}</span>
                   </div>
                 ))}
-                <div className="border-t border-border/60 pt-2 mt-2 space-y-1">
-                  <div className="flex justify-between text-sm"><span className="text-muted-foreground">Subtotal (Itens)</span><span className="font-medium">{formatCurrency(subtotal)}</span></div>
-                  {orderType === "Entrega" && <div className="flex justify-between text-sm"><span className="text-muted-foreground">Taxa de Entrega</span><span className="font-medium">{formatCurrency(deliveryFee)}</span></div>}
-                  <div className="flex justify-between items-center pt-1 border-t border-border"><span className="font-bold">Total Geral</span><span className="text-xl font-extrabold text-primary">{formatCurrency(totalGeral)}</span></div>
+              </div>
+              <div className="border-t border-border/60 pt-3 mt-3 space-y-1.5">
+                <div className="flex justify-between text-sm text-muted-foreground"><span>Subtotal (Itens)</span><span>{formatCurrency(subtotal)}</span></div>
+                {orderType === "Delivery" && <div className="flex justify-between text-sm text-muted-foreground"><span>Taxa de Entrega</span><span>{formatCurrency(deliveryFee)}</span></div>}
+                <div className="flex justify-between items-center pt-2 border-t border-border mt-2">
+                  <span className="font-bold text-lg">Total Geral</span>
+                  <span className="text-2xl font-black text-primary">{formatCurrency(totalGeral)}</span>
                 </div>
               </div>
 
-              {orderType === "Entrega" && selectedClient && (
-                <div className="p-3 rounded-lg border border-border bg-muted/30 text-sm space-y-0.5">
-                  <p className="font-semibold text-xs uppercase tracking-wide text-muted-foreground mb-1">Dados da Entrega</p>
-                  <p><span className="text-muted-foreground">Cliente:</span> {selectedClient.nome}</p>
-                  {phone && <p><span className="text-muted-foreground">Telefone:</span> {phone}</p>}
-                  {address && <p><span className="text-muted-foreground">Endereço:</span> {address}</p>}
-                  {complement && <p><span className="text-muted-foreground">Complemento:</span> {complement}</p>}
+              <div className="p-4 rounded-2xl border border-primary/10 bg-primary/5 space-y-2">
+                <p className="text-[10px] font-black uppercase text-primary tracking-widest mb-1">Resumo do Pedido</p>
+                <div className="flex items-center gap-2">
+                   <div className="w-1.5 h-1.5 rounded-full bg-primary" />
+                   <p className="text-sm font-bold">Tipo: {orderType}</p>
                 </div>
-              )}
-              {orderType === "Local" && identification && (
-                <div className="p-3 rounded-lg border border-border bg-muted/30 text-sm">
-                  <p className="font-semibold text-xs uppercase tracking-wide text-muted-foreground mb-1">Identificação</p>
-                  <p>{identification}</p>
-                </div>
-              )}
+                {(identification || selectedClient) && (
+                   <div className="flex items-center gap-2">
+                      <div className="w-1.5 h-1.5 rounded-full bg-primary" />
+                      <p className="text-sm font-medium">Cliente/Ident.: <span className="font-bold">{selectedClient?.nome || identification}</span></p>
+                   </div>
+                )}
+                {orderType === "Delivery" && address && (
+                   <div className="flex items-start gap-2">
+                      <div className="w-1.5 h-1.5 rounded-full bg-primary mt-1.5" />
+                      <p className="text-xs font-medium text-muted-foreground leading-tight">{address}{complement ? `, ${complement}` : ""}</p>
+                   </div>
+                )}
+              </div>
 
-              <div className="flex flex-wrap justify-end gap-2 pt-4 mt-2 border-t border-border/50">
+              <div className="flex justify-end gap-2 pt-4 mt-2 border-t border-border">
                 <Button variant="outline" onClick={() => setStep(1)} disabled={isSubmitting}>← Voltar</Button>
                 {linkedVendaId ? (
                   <Button onClick={handleAddItemsToExisting} disabled={isSubmitting} className="bg-indigo-600 text-white hover:bg-indigo-700">
@@ -1072,12 +1203,12 @@ export default function NewSale() {
                   </Button>
                 ) : (
                   <>
-                    {orderType === "Local" && (
-                      <Button variant="secondary" onClick={handleSaveComanda} disabled={isSubmitting} className="hover:bg-muted">
-                        {isSubmitting ? "Salvando..." : "Salvar Comanda"}
-                      </Button>
-                    )}
-                    <Button onClick={() => setStep(3)} disabled={isSubmitting} className="bg-primary text-primary-foreground hover:bg-primary/90">Ir para Pagamento →</Button>
+                    <Button variant="outline" onClick={handleSaveComanda} disabled={isSubmitting} className="border-primary/20 text-primary hover:bg-primary/5 font-bold">
+                      {isSubmitting ? "Salvando..." : "Salvar Aberto"}
+                    </Button>
+                    <Button onClick={() => setStep(3)} disabled={isSubmitting} className="bg-primary text-primary-foreground hover:bg-primary/90 min-w-[120px] font-bold">
+                      Pagar Agora →
+                    </Button>
                   </>
                 )}
               </div>
@@ -1099,7 +1230,7 @@ export default function NewSale() {
                 </div>
               </div>
 
-              {orderType === "Entrega" && paymentMethods.find(m => m.id === paymentMethodId)?.nome?.toLowerCase().includes("dinheiro") && (
+              {orderType === "Delivery" && paymentMethods.find(m => m.id === paymentMethodId)?.nome?.toLowerCase().includes("dinheiro") && (
                 <div className="animate-in fade-in slide-in-from-top-2 duration-200 space-y-2 p-3 rounded-lg border border-border bg-muted/30">
                   <div className="flex items-center justify-between">
                     <Label className="font-semibold">Troco para quanto? <span className="font-normal text-muted-foreground">(opcional)</span></Label>

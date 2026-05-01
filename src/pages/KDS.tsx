@@ -27,6 +27,7 @@ interface ItemPedido {
     id: string;
     criado_em: string;
     nome_cliente: string | null;
+    tipo_pedido: string;
     clientes?: { nome: string };
   };
 }
@@ -36,6 +37,7 @@ interface PedidoAgrupado {
   venda_id: string;
   status_cozinha: 'pendente' | 'preparando' | 'pronto';
   nome_cliente: string;
+  tipo_pedido: string;
   criado_em: string;
   itens: { id: string; nome_produto: string; quantidade: number }[];
 }
@@ -91,10 +93,13 @@ export default function KDS() {
           criado_em,
           nome_cliente,
           situacao,
-          clientes (nome)
+          tipo_pedido,
+          clientes (nome),
+          entregas (endereco, telefone, taxa)
         `)
         .in("id", vendaIdsRaw)
-        .neq("situacao", "Aguardando confirmação"); // TRAVA: Ignora se não confirmado
+        .neq("situacao", "Aguardando confirmação") // TRAVA: Ignora se não confirmado
+        .or('tipo_pedido.in.("Retirada","Delivery"),tipo_pedido.is.null');
 
       if (vError) throw vError;
 
@@ -121,9 +126,14 @@ export default function KDS() {
             venda_id: item.venda_id,
             status_cozinha: item.status_cozinha,
             nome_cliente: v.clientes?.nome || v.nome_cliente || "Balcão",
+            tipo_pedido: v.tipo_pedido || "Presencial",
             criado_em: v.criado_em,
-            itens: []
-          };
+            itens: [],
+            // Adicionando dados extras para quando precisar criar entrega
+            endereco: v.entregas?.[0]?.endereco,
+            telefone: v.entregas?.[0]?.telefone,
+            taxa: v.entregas?.[0]?.taxa
+          } as any;
         }
         grupos[key].itens.push({
           id: item.id,
@@ -157,20 +167,58 @@ export default function KDS() {
 
       if (error) throw error;
 
-      // Se o pedido foi finalizado na cozinha, libera para entrega
+      // 1. Quando todos os itens ficam PRONTOS
+      if (novoStatus === 'pronto') {
+        const { data: faltantes } = await supabase
+          .from("itens_venda")
+          .select("id")
+          .eq("venda_id", grupo.venda_id)
+          .not("status_cozinha", "in", `(pronto,entregue,cancelado,concluído)`);
+
+        if (!faltantes || faltantes.length === 0) {
+          // Só cria registro de entrega se for Delivery
+          if (grupo.tipo_pedido === 'Delivery') {
+            const { data: entregaExistente } = await supabase
+              .from("entregas")
+              .select("id")
+              .eq("venda_id", grupo.venda_id)
+              .limit(1);
+
+            if (entregaExistente && entregaExistente.length > 0) {
+              await supabase
+                .from("entregas")
+                .update({ status: 'pendente' } as any)
+                .eq("venda_id", grupo.venda_id);
+            } else {
+              await supabase
+                .from("entregas")
+                .insert({ 
+                  venda_id: grupo.venda_id, 
+                  status: 'pendente',
+                  endereco: (grupo as any).endereco || '',
+                  telefone: (grupo as any).telefone || '',
+                  taxa: (grupo as any).taxa || 0
+                } as any);
+            }
+          }
+        }
+      }
+
+      // 2. Mantém comportamento para quando o status é ENTREGUE (balão/finalização)
       if (novoStatus === 'entregue') {
         const { data: faltantes } = await (supabase as any)
           .from("itens_venda")
           .select("id")
           .eq("venda_id", grupo.venda_id)
-          .neq("status_cozinha", "entregue")
-          .neq("status_cozinha", "cancelado");
+          .not("status_cozinha", "in", '("entregue", "cancelado", "concluído")');
 
         if (!faltantes || faltantes.length === 0) {
-          await supabase
-            .from("entregas")
-            .update({ status: 'pendente' } as any)
-            .eq("venda_id", grupo.venda_id);
+          if (grupo.tipo_pedido === 'Delivery') {
+            await supabase
+              .from("entregas")
+              .update({ status: 'pendente' } as any)
+              .eq("venda_id", grupo.venda_id);
+          }
         }
       }
 
@@ -188,6 +236,7 @@ export default function KDS() {
       toast.success(`Itens atualizados para: ${novoStatus}`);
       fetchPedidos();
     } catch (error) {
+      console.error(error);
       toast.error("Erro ao atualizar status dos itens");
     }
   }
@@ -303,7 +352,16 @@ function PedidoCard({ pedido, onAction, actionLabel, actionIcon, color, timer }:
             <ShoppingBag size={18} />
           </div>
           <div>
-            <h4 className="font-bold text-sm leading-none">{pedido.nome_cliente}</h4>
+            <div className="flex items-center gap-2">
+              <h4 className="font-bold text-sm leading-none">{pedido.nome_cliente}</h4>
+              <Badge variant="outline" className={`text-[8px] h-4 px-1 font-black uppercase ${
+                pedido.tipo_pedido === 'Delivery' ? "border-orange-500 text-orange-600 bg-orange-50" : 
+                pedido.tipo_pedido === 'Retirada' ? "border-blue-500 text-blue-600 bg-blue-50" : 
+                "border-gray-500 text-gray-600 bg-gray-50"
+              }`}>
+                {pedido.tipo_pedido}
+              </Badge>
+            </div>
             <span className="text-[10px] text-muted-foreground font-medium uppercase tracking-tighter">
               Pedido de {new Date(pedido.criado_em).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
             </span>

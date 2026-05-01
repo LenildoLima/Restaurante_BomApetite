@@ -27,15 +27,15 @@ Deno.serve(async (req) => {
         headers: {
           'Authorization': `Bearer ${accessToken}`,
           'Content-Type': 'application/json',
-          'X-Idempotency-Key': `launchapp-${Date.now()}`
+          'X-Idempotency-Key': `bom-apetite-${Date.now()}`
         },
         body: JSON.stringify({
           transaction_amount: Number(valor),
-          description: descricao || 'Pedido LaunchApp',
+          description: descricao || 'Pedido Bom Apetite',
           payment_method_id: 'pix',
           date_of_expiration: expirationDate,
           payer: {
-            email: 'cliente@launchapp.com',
+            email: 'cliente@bomapetite.com',
             identification: {
               type: 'CPF',
               number: '00000000191'

@@ -185,7 +185,7 @@ export default function Dashboard() {
       <div className="sticky top-20 z-30 -mx-4 px-4 py-4 -mt-4 bg-background/95 backdrop-blur shadow-sm md:-mx-6 md:px-6 lg:-mx-8 lg:px-8 border-b border-border/50 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-foreground">Painel</h1>
-          <p className="text-muted-foreground text-sm">Visão geral da lanchonete</p>
+          <p className="text-muted-foreground text-sm">Visão geral da marmitaria</p>
         </div>
 
         {/* Atalhos Rápidos */}

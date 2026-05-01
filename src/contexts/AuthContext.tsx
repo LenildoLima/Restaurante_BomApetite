@@ -107,11 +107,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return { error: "Usuário não encontrado." };
       }
 
-      const { data: dbData, error: dbError } = await supabase
+      let { data: dbData, error: dbError } = await supabase
         .from("usuarios")
         .select("id, nome, email, perfil, ativo")
         .eq("id", data.user.id)
         .maybeSingle();
+
+      // Se não achou por ID, tenta buscar pelo email para detectar se é um problema de ID mismatch (comum em migrações)
+      if (!dbData && !dbError) {
+        const { data: userByEmail } = await supabase
+          .from("usuarios")
+          .select("id, nome, email, perfil, ativo")
+          .eq("email", data.user.email)
+          .maybeSingle();
+        
+        if (userByEmail) {
+          await supabase.auth.signOut();
+          return { error: "ID de usuário desalinhado no banco. Por favor, execute o comando SQL de sincronização enviado anteriormente." };
+        }
+      }
         
       if (dbError || !dbData) {
         await supabase.auth.signOut();

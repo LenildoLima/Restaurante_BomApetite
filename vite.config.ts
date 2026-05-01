@@ -20,9 +20,9 @@ export default defineConfig(({ mode }) => ({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.svg', 'apple-touch-icon.png', 'robots.txt'],
       manifest: {
-        name: 'LaunchApp - Gestão de Lanchonete',
-        short_name: 'LaunchApp',
-        description: 'Gerenciador completo para sua lanchonete e cozinha.',
+        name: 'Bom Apetite - Gestão de Marmitaria',
+        short_name: 'Bom Apetite',
+        description: 'Gerenciador completo para sua marmitaria e cozinha.',
         theme_color: '#1e3a8a',
         background_color: '#ffffff',
         display: 'standalone',

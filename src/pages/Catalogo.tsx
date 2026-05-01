@@ -1,7 +1,13 @@
 import { useEffect, useState, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { formatCurrency } from "@/lib/format";
-import { Search, Plus, Minus, X, ShoppingCart, ChevronRight, ChevronLeft, QrCode, Clock, ClipboardList, RefreshCw } from "lucide-react";
+import { 
+  Search, Plus, Minus, X, ShoppingCart, 
+  ChevronRight, ChevronLeft, QrCode, 
+  Clock, ClipboardList, RefreshCw,
+  MapPin, Truck, Wallet, Info, ArrowLeft,
+  Settings, CheckCircle2
+} from "lucide-react";
 
 // ── Types ────────────────────────────────────────────────
 interface Product {
@@ -12,36 +18,36 @@ interface Product {
   categoria_id: string;
   categorias?: { nome: string } | null;
   estoque?: { saldo: number }[] | null;
+  saldo?: number;
 }
 interface Category { id: string; nome: string; }
 interface CartItem { product: Product; quantity: number; }
 interface FormasPgto { id: string; nome: string; }
 
-const ORANGE = "#f97316";
-const NAVY = "#1e3a8a";
-const BG = "#faf8f5";
-
-const CATEGORY_COLORS: Record<string, string> = {
-  Bebidas: "#3b82f6", Lanches: "#f97316", Porções: "#22c55e",
-  Sobremesas: "#ec4899", Lançamentos: "#f59e0b", Éxodo: "#6366f1",
+// ── Design Tokens ────────────────────────────────────────
+const COLORS = {
+  primary: "#D4521A", // Laranja
+  dark: "#3D1F0A",    // Marrom escuro
+  bg: "#FDF6EE",      // Bege fundo
+  textSoft: "#8B6550" // Texto suave
 };
-const catColor = (name: string) => CATEGORY_COLORS[name] || "#94a3b8";
 
-// ── Countdown de 10 minutos ─────────────────────────────
+// ── Countdown Component ──────────────────────────────────
 function Countdown({ seconds }: { seconds: number }) {
   const m = Math.floor(seconds / 60).toString().padStart(2, "0");
   const s = (seconds % 60).toString().padStart(2, "0");
   const pct = (seconds / 600) * 100;
-  const color = seconds < 120 ? "#ef4444" : seconds < 300 ? "#f59e0b" : ORANGE;
+  const color = seconds < 120 ? "#ef4444" : seconds < 300 ? "#f59e0b" : COLORS.primary;
+  
   return (
-    <div style={{ textAlign: "center", margin: "12px 0" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 6, justifyContent: "center", color, fontWeight: 800, fontSize: 22 }}>
+    <div className="text-center my-4 font-sans">
+      <div className="flex items-center gap-2 justify-center font-bold text-2xl" style={{ color }}>
         <Clock size={20} /> {m}:{s}
       </div>
-      <div style={{ background: "#e5e7eb", borderRadius: 99, height: 6, marginTop: 6, overflow: "hidden" }}>
-        <div style={{ background: color, width: `${pct}%`, height: "100%", transition: "width 1s linear, background 0.5s" }} />
+      <div className="bg-gray-200 rounded-full h-1.5 mt-2 overflow-hidden w-full max-w-[200px] mx-auto">
+        <div style={{ background: color, width: `${pct}%`, height: "100%", transition: "width 1s linear" }} />
       </div>
-      <p style={{ fontSize: 11, color: "#6b7280", marginTop: 4 }}>Tempo restante para pagar</p>
+      <p className="text-[10px] text-gray-500 mt-1 uppercase tracking-wider">Aguardando pagamento</p>
     </div>
   );
 }
@@ -60,13 +66,26 @@ export default function Catalogo() {
   const [historyOpen, setHistoryOpen] = useState(false);
   const [meusPedidos, setMeusPedidos] = useState<any[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
+  
+  // Date selection (UI only for now)
+  const [selectedDate, setSelectedDate] = useState(0); // 0=Hoje, 1=Amanhã, etc.
+  const dates = Array.from({ length: 5 }, (_, i) => {
+    const d = new Date();
+    d.setDate(d.getDate() + i);
+    return {
+      label: i === 0 ? "Hoje" : i === 1 ? "Amanhã" : d.toLocaleDateString('pt-BR', { weekday: 'short' }),
+      day: d.getDate(),
+      dateFull: d
+    };
+  });
 
   // Form state
-  const [orderType, setOrderType] = useState<"Local" | "Delivery">("Local");
+  const [orderType, setOrderType] = useState<"Delivery" | "Retirada">("Delivery");
   const [nome, setNome] = useState("");
   const [telefone, setTelefone] = useState("");
   const [endereco, setEndereco] = useState("");
   const [complemento, setComplemento] = useState("");
+  const [cep, setCep] = useState("");
   const [observacoes, setObservacoes] = useState("");
   const [pgtoId, setPgtoId] = useState("");
   const [troco, setTroco] = useState("");
@@ -81,7 +100,6 @@ export default function Catalogo() {
   // Success
   const [pedidoId, setPedidoId] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const [copied, setCopied] = useState(false);
 
   // ── Load data ─────────────────────────────────────────
   useEffect(() => {
@@ -92,7 +110,11 @@ export default function Catalogo() {
       if (produtosData) {
         const produtosComInfo = (produtosData as any[]).map(p => {
           const cat = (categoriasData || []).find(c => c.id === p.categoria_id);
-          return { ...p, categorias: cat ? { nome: cat.nome } : null, saldo: estoqueData?.find(e => e.produto_id === p.id)?.saldo || 0 };
+          return { 
+            ...p, 
+            categorias: cat ? { nome: cat.nome } : null, 
+            saldo: estoqueData?.find(e => e.produto_id === p.id)?.saldo || 0 
+          };
         });
         setProducts(produtosComInfo);
       }
@@ -102,8 +124,18 @@ export default function Catalogo() {
     loadData();
   }, []);
 
+  // ── Persistence ─────────────────────────────────────
+  useEffect(() => {
+    const cid = localStorage.getItem("cliente_id_marmitaria");
+    const cNome = localStorage.getItem("cliente_nome_marmitaria");
+    const cTel = localStorage.getItem("cliente_tel_marmitaria");
+    if (cNome) setNome(cNome);
+    if (cTel) setTelefone(cTel);
+    if (cid) fetchHistorico();
+  }, []);
+
   // ── Cart helpers ─────────────────────────────────────
-  const getStock = (p: Product) => (p as any).saldo ?? 0;
+  const getStock = (p: Product) => p.saldo ?? 0;
   const addToCart = (p: Product) => {
     if (getStock(p) <= 0) return;
     setCart(prev => {
@@ -114,28 +146,21 @@ export default function Catalogo() {
   };
   const updateQty = (id: string, delta: number) =>
     setCart(prev => prev.map(i => i.product.id === id ? { ...i, quantity: i.quantity + delta } : i).filter(i => i.quantity > 0));
+  
   const subtotal = cart.reduce((s, i) => s + i.product.preco * i.quantity, 0);
-  const total = cart.reduce((s, i) => s + i.product.preco * i.quantity, 0);
+  const taxaEntrega = orderType === "Delivery" ? 5 : 0; // Taxa fixa exemplo para o catálogo
+  const total = subtotal + taxaEntrega;
   const totalItems = cart.reduce((s, i) => s + i.quantity, 0);
 
   // ── History logic ────────────────────────────────────
   async function fetchHistorico() {
-    const cid = localStorage.getItem("cliente_id_lanchonete");
+    const cid = localStorage.getItem("cliente_id_marmitaria");
     if (!cid) return;
     setHistoryLoading(true);
     const { data } = await supabase.from("vendas").select(`id, criado_em, total, situacao, entregas(status, taxa)`).eq("cliente_id", cid).order("criado_em", { ascending: false });
     setMeusPedidos(data || []);
     setHistoryLoading(false);
   }
-
-  useEffect(() => {
-    const cid = localStorage.getItem("cliente_id_lanchonete");
-    const cNome = localStorage.getItem("cliente_nome_lanchonete");
-    const cTel = localStorage.getItem("cliente_tel_lanchonete");
-    if (cNome) setNome(cNome);
-    if (cTel) setTelefone(cTel);
-    if (cid) fetchHistorico();
-  }, []);
 
   const filtered = products.filter(p => {
     const matchSearch = p.nome.toLowerCase().includes(search.toLowerCase());
@@ -145,7 +170,11 @@ export default function Catalogo() {
 
   const getPgtoType = () => {
     const fm = formasPgto.find(f => f.id === pgtoId)?.nome.toLowerCase() || "";
-    return { isPix: fm.includes("pix"), isDinheiro: fm.includes("dinheiro"), isCartao: fm.includes("crédito") || fm.includes("credito") || fm.includes("débito") || fm.includes("debito") };
+    return { 
+      isPix: fm.includes("pix"), 
+      isDinheiro: fm.includes("dinheiro"), 
+      isCartao: fm.includes("crédito") || fm.includes("credito") || fm.includes("débito") || fm.includes("debito") 
+    };
   };
 
   async function gerarPix() {
@@ -156,7 +185,7 @@ export default function Catalogo() {
       const res = await fetch(`${supabaseUrl}/functions/v1/gerar-pix`, {
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": `Bearer ${supabaseKey}`, "apikey": supabaseKey },
-        body: JSON.stringify({ valor: total, descricao: `Pedido LaunchApp — ${cart.length} itens` }),
+        body: JSON.stringify({ valor: total, descricao: `Pedido Bom Apetite — ${cart.length} itens` }),
       });
       const data = await res.json();
       if (data.success) {
@@ -188,186 +217,500 @@ export default function Catalogo() {
       }
       const { isDinheiro } = getPgtoType();
       const obsCompleta = [observacoes, isDinheiro && troco ? `Troco para R$ ${troco}` : ""].filter(Boolean).join(" | ");
-      const { data: venda, error: e1 } = await supabase.from("vendas").insert({ nome_cliente: nome.trim(), cliente_id: clienteId, forma_pagamento_id: pgtoId, total: subtotal, situacao: "Aguardando confirmação", observacoes: obsCompleta || null } as any).select("id").single();
+      const { data: venda, error: e1 } = await supabase.from("vendas").insert({ 
+        nome_cliente: nome.trim(), 
+        cliente_id: clienteId, 
+        forma_pagamento_id: pgtoId, 
+        total: total, 
+        situacao: "Aguardando confirmação", 
+        tipo_pedido: orderType,
+        observacoes: obsCompleta || null 
+      } as any).select("id").single();
+      
       if (e1 || !venda) throw new Error("Erro ao registrar venda");
-      await supabase.from("itens_venda").insert(cart.map(i => ({ venda_id: venda.id, produto_id: i.product.id, nome_produto: i.product.nome, quantidade: i.quantity, preco_unitario: i.product.preco, status_cozinha: 'pendente' })));
-      if (orderType === "Delivery") await supabase.from("entregas").insert({ venda_id: venda.id, cliente_id: clienteId, endereco: endereco, complemento: complemento || null, telefone: telefone, taxa: 0, tipo_pedido: "Entrega", status: "aguardando" } as any);
+      
+      await supabase.from("itens_venda").insert(cart.map(i => ({ 
+        venda_id: venda.id, 
+        produto_id: i.product.id, 
+        nome_produto: i.product.nome, 
+        quantidade: i.quantity, 
+        preco_unitario: i.product.preco, 
+        status_cozinha: 'pendente' 
+      })));
+      
+      if (orderType === "Delivery") {
+        await supabase.from("entregas").insert({ 
+          venda_id: venda.id, 
+          cliente_id: clienteId, 
+          endereco: endereco, 
+          complemento: complemento || null, 
+          telefone: telefone, 
+          taxa: taxaEntrega, 
+          status: "pendente" 
+        } as any);
+      }
       
       if (clienteId) {
-        localStorage.setItem("cliente_id_lanchonete", clienteId);
-        localStorage.setItem("cliente_nome_lanchonete", nome.trim());
-        localStorage.setItem("cliente_tel_lanchonete", telefone.trim());
+        localStorage.setItem("cliente_id_marmitaria", clienteId);
+        localStorage.setItem("cliente_nome_marmitaria", nome.trim());
+        localStorage.setItem("cliente_tel_marmitaria", telefone.trim());
       }
-      localStorage.setItem("ultimo_pedido_lanchonete", JSON.stringify({ id: venda.id, itens: cart.map(i => ({ nome: i.product.nome, qtd: i.quantity })), total, timestamp: Date.now() }));
-      setPedidoId(venda.id); setStep(4); setCheckoutOpen(true); fetchHistorico();
+      
+      setPedidoId(venda.id); 
+      setStep(4); 
+      fetchHistorico();
     } catch (e: any) { alert("Erro: " + e.message); } finally { setSubmitting(false); }
   }
 
   function resetCheckout() {
-    localStorage.removeItem("ultimo_pedido_lanchonete");
     setCheckoutOpen(false); setStep(1); setCart([]); setObservacoes(""); setPgtoId(""); setTroco(""); setPixQr(""); setPixCopyCola(""); setPedidoId("");
     if (countdownRef.current) clearInterval(countdownRef.current);
   }
 
-  useEffect(() => {
-    const salvo = localStorage.getItem("ultimo_pedido_lanchonete");
-    if (salvo) {
-      try {
-        const d = JSON.parse(salvo);
-        if (Date.now() - d.timestamp < 86400000) { setPedidoId(d.id); setStep(4); setCheckoutOpen(true); }
-        else localStorage.removeItem("ultimo_pedido_lanchonete");
-      } catch { localStorage.removeItem("ultimo_pedido_lanchonete"); }
-    }
-  }, []);
-
+  // ── Render ───────────────────────────────────────────
   return (
-    <div style={{ minHeight: "100vh", background: BG, fontFamily: "'Inter', sans-serif" }}>
+    <div className="min-h-screen font-sans" style={{ background: COLORS.bg }}>
+      <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=Playfair+Display:wght@700;800&display=swap" rel="stylesheet" />
       <style>{`
-        body { background: ${BG}; }
-        .cat-btn { border: none; cursor: pointer; border-radius: 99px; padding: 6px 16px; font-size: 13px; font-weight: 700; transition: all .15s; }
-        .prod-card { background: #fff; border-radius: 16px; box-shadow: 0 2px 12px rgba(0,0,0,.07); overflow: hidden; transition: transform .15s; cursor: pointer; }
-        .prod-card:hover:not(.disabled) { transform: translateY(-3px); }
-        .cart-fab { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: ${ORANGE}; color: #fff; border: none; border-radius: 99px; padding: 14px 28px; font-size: 15px; font-weight: 800; cursor: pointer; box-shadow: 0 8px 32px rgba(249,115,22,.4); z-index: 100; display: flex; align-items: center; gap: 10px; }
-        .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.5); z-index: 200; display: flex; align-items: center; justify-content: center; padding: 16px; }
-        .modal-panel { background: #fff; border-radius: 24px; width: 100%; max-width: 480px; max-height: 90vh; overflow-y: auto; padding: 24px; box-shadow: 0 20px 50px rgba(0,0,0,.2); }
-        .step-btn { width: 100%; padding: 14px; border-radius: 12px; font-size: 15px; font-weight: 800; border: none; cursor: pointer; }
-        .pill-radio { border: 2px solid #e5e7eb; border-radius: 12px; padding: 14px; cursor: pointer; text-align: center; flex: 1; }
-        .pill-radio.active { border-color: ${ORANGE}; background: #fff7ed; }
-        .input-field { width: 100%; border: 2px solid #e5e7eb; border-radius: 10px; padding: 10px 14px; font-size: 14px; outline: none; }
-        .pgto-btn { border: 2px solid #e5e7eb; border-radius: 12px; padding: 12px 16px; cursor: pointer; font-weight: 700; background: #fff; width: 100%; }
-        .pgto-btn.active { border-color: ${ORANGE}; background: #fff7ed; color: ${ORANGE}; }
-        .animate-spin { animation: spin 1s linear infinite; }
-        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        body { background: ${COLORS.bg}; font-family: 'DM Sans', sans-serif; }
+        h1, h2, h3, .font-playfair { font-family: 'Playfair Display', serif; }
+        .pulsing-dot { width: 8px; height: 8px; background: #22c55e; border-radius: 50%; box-shadow: 0 0 0 rgba(34, 197, 94, 0.4); animation: pulse 2s infinite; }
+        @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.4); } 70% { box-shadow: 0 0 0 10px rgba(34, 197, 94, 0); } 100% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0); } }
+        .hide-scrollbar::-webkit-scrollbar { display: none; }
+        .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        .product-card { background: white; border-radius: 20px; overflow: hidden; border: 1px solid rgba(139, 101, 80, 0.1); box-shadow: 0 4px 12px rgba(61, 31, 10, 0.05); transition: all 0.2s; }
+        .product-card:active { transform: scale(0.98); }
+        .cart-drawer { position: fixed; bottom: 0; left: 0; right: 0; background: white; border-top-left-radius: 32px; border-top-right-radius: 32px; z-index: 200; box-shadow: 0 -10px 40px rgba(0,0,0,0.1); max-height: 90vh; overflow-y: auto; }
       `}</style>
 
-      <header style={{ background: `linear-gradient(135deg, ${ORANGE} 0%, #ea580c 100%)`, padding: "16px 20px", position: "sticky", top: 0, zIndex: 110 }}>
-        <div style={{ maxWidth: 900, margin: "0 auto", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <div style={{ width: 44, height: 44, borderRadius: 12, background: "rgba(30,58,138,.2)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24 }}>🍔</div>
+      {/* FIXED HEADER */}
+      <header className="sticky top-0 z-[100] bg-white/80 backdrop-blur-md border-b border-orange-100/50 px-5 py-4">
+        <div className="max-w-6xl mx-auto flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-orange-100 rounded-xl flex items-center justify-center">
+              <img src="/logo-bom-apetite.png" alt="Logo" className="w-8 h-8 object-contain" />
+            </div>
             <div>
-              <span style={{ fontWeight: 900, fontSize: 20, color: "#fff" }}>LaunchApp</span>
-              <p style={{ fontSize: 10, color: "#FACC15", fontWeight: 800, textTransform: "uppercase" }}>Cardápio Online</p>
+              <h1 className="text-lg font-bold leading-tight" style={{ color: COLORS.dark }}>Bom Apetite</h1>
+              <div className="flex items-center gap-1.5 mt-0.5">
+                <span className="pulsing-dot"></span>
+                <span className="text-[10px] font-bold uppercase tracking-wider text-green-600">Aberto agora</span>
+              </div>
             </div>
           </div>
-          <button onClick={() => { setHistoryOpen(true); fetchHistorico(); }} style={{ background: "rgba(255,255,255,.15)", color: "#fff", border: "1px solid rgba(255,255,255,.3)", borderRadius: 10, padding: "8px 12px", fontSize: 12, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>
-            <ClipboardList size={16} /> Meus Pedidos
-          </button>
+          <div className="flex gap-2">
+            <button onClick={() => setHistoryOpen(true)} className="p-2.5 rounded-full hover:bg-orange-50 transition-colors" style={{ color: COLORS.dark }}>
+              <ClipboardList size={22} />
+            </button>
+            <a href="/login" className="p-2.5 rounded-full hover:bg-orange-50 transition-colors" style={{ color: COLORS.dark }}>
+              <Settings size={22} />
+            </a>
+          </div>
         </div>
       </header>
 
-      <div style={{ maxWidth: 900, margin: "0 auto", padding: "20px 16px 120px" }}>
-        <div style={{ position: "relative", marginBottom: 16 }}>
-          <Search size={18} style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", color: "#9ca3af" }} />
-          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar produtos..." style={{ width: "100%", padding: "12px 14px 12px 42px", border: "2px solid #e5e7eb", borderRadius: 12, fontSize: 15, outline: "none", background: "#fff" }} />
+      {/* HERO BANNER */}
+      <section className="px-5 pt-4 pb-2">
+        <div className="max-w-6xl mx-auto rounded-[32px] p-6 text-white relative overflow-hidden" style={{ background: COLORS.dark }}>
+          <div className="relative z-10">
+            <span className="text-orange-400 text-xs font-bold uppercase tracking-[0.2em] mb-2 block">Menu Exclusivo</span>
+            <h2 className="text-3xl font-black mb-4">Cardápio do Dia</h2>
+            <div className="flex flex-wrap gap-2">
+              <div className="flex items-center gap-1.5 bg-white/10 backdrop-blur-md px-3 py-1.5 rounded-full text-[11px] font-medium">
+                <Truck size={14} className="text-orange-400" /> Delivery
+              </div>
+              <div className="flex items-center gap-1.5 bg-white/10 backdrop-blur-md px-3 py-1.5 rounded-full text-[11px] font-medium">
+                <Wallet size={14} className="text-orange-400" /> PIX / Cartão
+              </div>
+            </div>
+          </div>
+          {/* Subtle decoration */}
+          <div className="absolute -right-10 -bottom-10 w-40 h-40 bg-orange-500/20 rounded-full blur-3xl"></div>
+          <div className="absolute -left-10 -top-10 w-32 h-32 bg-orange-400/10 rounded-full blur-2xl"></div>
         </div>
-        
-        <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 8, marginBottom: 16 }}>
-          <button className="cat-btn" onClick={() => setCatFilter("Todos")} style={{ background: catFilter === "Todos" ? ORANGE : "#fff", border: "1px solid #e5e7eb", minWidth: 80 }}>Todos</button>
-          {categories.map(c => (
-            <button key={c.id} className="cat-btn" onClick={() => setCatFilter(c.id)} style={{ background: catFilter === c.id ? catColor(c.nome) : "#fff", color: catFilter === c.id ? "#fff" : "#374151", border: "1px solid #e5e7eb", whiteSpace: "nowrap" }}>{c.nome}</button>
-          ))}
-        </div>
+      </section>
 
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))", gap: 14 }}>
+      {/* DATE SELECTOR */}
+      <section className="px-5 py-4 overflow-hidden">
+        <div className="max-w-6xl mx-auto">
+          <div className="flex gap-3 overflow-x-auto hide-scrollbar pb-2">
+            {dates.map((d, i) => (
+              <button 
+                key={i} 
+                onClick={() => setSelectedDate(i)}
+                className={`flex-shrink-0 w-16 h-20 rounded-2xl flex flex-col items-center justify-center transition-all ${
+                  selectedDate === i 
+                    ? "bg-orange-600 text-white shadow-lg shadow-orange-500/30 scale-105" 
+                    : "bg-white border border-gray-100 text-gray-400"
+                }`}
+              >
+                <span className="text-[10px] font-bold uppercase mb-1">{d.label}</span>
+                <span className="text-xl font-black">{d.day}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* SEARCH AND CATEGORIES */}
+      <section className="px-5 py-2 sticky top-[73px] z-[90] bg-inherit">
+        <div className="max-w-6xl mx-auto space-y-4">
+          <div className="relative group">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-orange-500 transition-colors" size={20} />
+            <input 
+              value={search} 
+              onChange={e => setSearch(e.target.value)} 
+              placeholder="O que você deseja hoje?" 
+              className="w-full bg-white border-2 border-transparent focus:border-orange-200 outline-none rounded-2xl py-3.5 pl-12 pr-4 shadow-sm transition-all" 
+              style={{ color: COLORS.dark }}
+            />
+          </div>
+          
+          <div className="flex gap-2 overflow-x-auto hide-scrollbar">
+            <button 
+              onClick={() => setCatFilter("Todos")}
+              className={`flex-shrink-0 px-5 py-2.5 rounded-xl font-bold text-sm transition-all ${
+                catFilter === "Todos" 
+                  ? "bg-[#3D1F0A] text-white" 
+                  : "bg-white text-[#8B6550] border border-gray-200"
+              }`}
+            >
+              Todos
+            </button>
+            {categories.map(c => (
+              <button 
+                key={c.id} 
+                onClick={() => setCatFilter(c.id)}
+                className={`flex-shrink-0 px-5 py-2.5 rounded-xl font-bold text-sm transition-all ${
+                  catFilter === c.id 
+                    ? "bg-[#3D1F0A] text-white" 
+                    : "bg-white text-[#8B6550] border border-gray-200"
+                }`}
+              >
+                {c.nome}
+              </button>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* PRODUCTS GRID */}
+      <section className="px-5 py-6 pb-32">
+        <div className="max-w-6xl mx-auto grid grid-cols-2 lg:grid-cols-3 gap-4">
           {filtered.map(p => {
             const stock = getStock(p);
             const inCart = cart.find(i => i.product.id === p.id)?.quantity || 0;
             return (
-              <div key={p.id} className={`prod-card${stock <= 0 ? " disabled" : ""}`} onClick={() => addToCart(p)}>
-                {p.imagem_url && <img src={p.imagem_url} alt={p.nome} style={{ width: "100%", height: 110, objectFit: "cover" }} />}
-                <div style={{ padding: 12 }}>
-                  {!p.imagem_url && <span style={{ background: catColor(p.categorias?.nome || ""), color: "#fff", fontSize: 9, fontWeight: 800, padding: "1px 6px", borderRadius: 4, textTransform: "uppercase" }}>{p.categorias?.nome}</span>}
-                  <p style={{ fontWeight: 700, fontSize: 13, color: NAVY, marginTop: 4 }}>{p.nome}</p>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 8 }}>
-                    <span style={{ fontWeight: 900, color: ORANGE }}>{formatCurrency(p.preco)}</span>
-                    {stock > 0 ? (inCart > 0 ? <span style={{ background: ORANGE, color: "#fff", fontWeight: 800, fontSize: 11, borderRadius: 99, padding: "1px 8px" }}>{inCart}</span> : <Plus size={18} color={ORANGE} />) : <span style={{ fontSize: 9, color: "#ef4444", fontWeight: 700 }}>Esgotado</span>}
+              <div key={p.id} className="product-card flex flex-col">
+                <div className="relative aspect-video overflow-hidden bg-gray-100">
+                  {p.imagem_url ? (
+                    <img src={p.imagem_url} alt={p.nome} className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center text-4xl bg-orange-50/50">
+                      🥘
+                    </div>
+                  )}
+                  {stock > 0 && stock <= 10 && (
+                    <div className="absolute top-2 right-2 bg-red-500 text-white text-[9px] font-black px-2 py-1 rounded-full uppercase tracking-tighter">
+                      Resta {stock}
+                    </div>
+                  )}
+                  {stock <= 0 && (
+                     <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
+                        <span className="text-white font-black text-sm uppercase tracking-widest border-2 border-white px-3 py-1 -rotate-3">Esgotado</span>
+                     </div>
+                  )}
+                  <div className="absolute bottom-2 left-2 px-2 py-0.5 rounded-md bg-white/90 backdrop-blur-sm text-[9px] font-bold uppercase tracking-wider text-[#D4521A]">
+                    {p.categorias?.nome || "Marmita"}
+                  </div>
+                </div>
+                <div className="p-4 flex flex-col flex-1">
+                  <h3 className="font-bold text-sm leading-snug mb-1 line-clamp-2" style={{ color: COLORS.dark }}>{p.nome}</h3>
+                  <p className="text-[10px] leading-relaxed mb-4 line-clamp-2 flex-1" style={{ color: COLORS.textSoft }}>Prato especial preparado com ingredientes frescos selecionados.</p>
+                  
+                  <div className="flex items-center justify-between mt-auto">
+                    <span className="text-lg font-black" style={{ color: COLORS.primary }}>
+                      {formatCurrency(p.preco)}
+                    </span>
+                    
+                    {stock > 0 && (
+                      <button 
+                        onClick={() => addToCart(p)}
+                        className={`w-9 h-9 rounded-xl flex items-center justify-center transition-all ${
+                          inCart > 0 ? "bg-[#3D1F0A] text-white" : "bg-orange-50 text-orange-600 hover:bg-orange-100"
+                        }`}
+                      >
+                        {inCart > 0 ? <span className="font-black text-sm">{inCart}</span> : <Plus size={20} />}
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
             );
           })}
         </div>
-      </div>
+      </section>
 
-      {totalItems > 0 && !cartOpen && !checkoutOpen && <button className="cart-fab" onClick={() => setCartOpen(true)}><ShoppingCart size={20} /> Ver Sacola ({totalItems})</button>}
-
-      {cartOpen && (
-        <div className="modal-overlay" onClick={() => setCartOpen(false)}>
-          <div className="modal-panel" onClick={e => e.stopPropagation()}>
-            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 20 }}>
-              <h2 style={{ fontWeight: 900, color: NAVY }}>Sua Sacola</h2>
-              <button onClick={() => setCartOpen(false)} style={{ background: "none", border: "none" }}><X size={22} /></button>
-            </div>
-            {cart.map(item => (
-              <div key={item.product.id} style={{ display: "flex", justifyContent: "space-between", marginBottom: 12, background: "#f9fafb", padding: 10, borderRadius: 10 }}>
-                <div><p style={{ fontWeight: 700, fontSize: 14 }}>{item.product.nome}</p><p style={{ color: ORANGE, fontWeight: 800, fontSize: 12 }}>{formatCurrency(item.product.preco * item.quantity)}</p></div>
-                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                  <button onClick={() => updateQty(item.product.id, -1)} style={{ width: 26, height: 26, borderRadius: 6, border: "1px solid #ddd", background: "#fff" }}>-</button>
-                  <span style={{ fontWeight: 800 }}>{item.quantity}</span>
-                  <button onClick={() => updateQty(item.product.id, 1)} style={{ width: 26, height: 26, borderRadius: 6, border: "none", background: ORANGE, color: "#fff" }}>+</button>
-                </div>
+      {/* FAB CART */}
+      {totalItems > 0 && (
+        <div className="fixed bottom-8 left-0 right-0 z-[150] px-5 pointer-events-none">
+          <button 
+            onClick={() => setCartOpen(true)}
+            className="w-full max-w-lg mx-auto bg-[#3D1F0A] text-white flex items-center justify-between p-4 rounded-3xl shadow-2xl pointer-events-auto active:scale-95 transition-all"
+          >
+            <div className="flex items-center gap-3">
+              <div className="relative">
+                <ShoppingCart size={24} />
+                <span className="absolute -top-2 -right-2 bg-[#D4521A] text-white text-[10px] font-black w-5 h-5 rounded-full flex items-center justify-center border-2 border-[#3D1F0A]">
+                  {totalItems}
+                </span>
               </div>
-            ))}
-            <div style={{ borderTop: "2px solid #eee", paddingTop: 15, textAlign: "right", marginBottom: 20 }}>
-              <span style={{ fontWeight: 700, marginRight: 10 }}>Subtotal:</span>
-              <span style={{ fontWeight: 900, fontSize: 20, color: ORANGE }}>{formatCurrency(total)}</span>
+              <div className="text-left">
+                <span className="text-xs font-bold text-orange-300 block leading-none mb-1">Na sacola</span>
+                <span className="text-sm font-black uppercase tracking-wider">Ver Carrinho</span>
+              </div>
             </div>
-            <button className="step-btn" style={{ background: ORANGE, color: "#fff" }} onClick={() => { setCartOpen(false); setCheckoutOpen(true); setStep(1); }}>Finalizar Pedido</button>
+            <div className="text-right">
+              <span className="text-lg font-black">{formatCurrency(total)}</span>
+            </div>
+          </button>
+        </div>
+      )}
+
+      {/* CART DRAWER */}
+      {cartOpen && (
+        <div className="fixed inset-0 z-[200]">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setCartOpen(false)}></div>
+          <div className="cart-drawer p-6 flex flex-col">
+            <div className="flex items-center justify-between mb-8">
+              <div>
+                <h2 className="text-2xl font-black" style={{ color: COLORS.dark }}>Minha Sacola</h2>
+                <p className="text-xs text-[#8B6550]">{totalItems} {totalItems === 1 ? 'item' : 'itens'}</p>
+              </div>
+              <button 
+                onClick={() => setCartOpen(false)} 
+                className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center text-gray-500"
+              >
+                <X size={24} />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto space-y-4 mb-8 pr-2">
+              {cart.map(item => (
+                <div key={item.product.id} className="flex gap-4 items-center bg-gray-50 rounded-2xl p-4">
+                  <div className="w-16 h-16 rounded-xl bg-gray-200 overflow-hidden flex-shrink-0">
+                    <img src={item.product.imagem_url || ""} alt={item.product.nome} className="w-full h-full object-cover" />
+                  </div>
+                  <div className="flex-1">
+                    <h4 className="font-bold text-sm leading-tight mb-1" style={{ color: COLORS.dark }}>{item.product.nome}</h4>
+                    <span className="text-orange-600 font-bold text-sm">{formatCurrency(item.product.preco)}</span>
+                  </div>
+                  <div className="flex items-center gap-3 bg-white rounded-xl border border-gray-200 py-1.5 px-2">
+                    <button onClick={() => updateQty(item.product.id, -1)} className="text-orange-600 p-1"><Minus size={16} /></button>
+                    <span className="font-black text-sm w-4 text-center">{item.quantity}</span>
+                    <button onClick={() => updateQty(item.product.id, 1)} className="text-orange-600 p-1"><Plus size={16} /></button>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="border-t border-dashed border-gray-200 pt-6 space-y-3 mb-8">
+              <div className="flex justify-between text-xs text-gray-500">
+                <span>Subtotal</span>
+                <span>{formatCurrency(subtotal)}</span>
+              </div>
+              <div className="flex justify-between font-black text-lg" style={{ color: COLORS.dark }}>
+                <span>Total</span>
+                <span className="text-orange-600">{formatCurrency(total)}</span>
+              </div>
+            </div>
+
+            <button 
+              onClick={() => { setCartOpen(false); setCheckoutOpen(true); }}
+              className="w-full bg-[#D4521A] text-white py-4 rounded-2xl font-black uppercase tracking-widest shadow-xl shadow-orange-500/20 active:scale-95 transition-all"
+            >
+              Próximo Passo
+            </button>
           </div>
         </div>
       )}
 
+      {/* CHECKOUT MODAL */}
       {checkoutOpen && (
-        <div className="modal-overlay">
-          <div className="modal-panel" style={{ background: step === 4 ? "#fff" : "#fff" }}>
+        <div className="fixed inset-0 z-[250] bg-white pt-10 flex flex-col">
+          <header className="px-6 flex items-center justify-between mb-8">
+            <button onClick={() => step > 1 && step < 4 ? setStep(step - 1) : resetCheckout()} className="w-10 h-10 rounded-full bg-gray-50 flex items-center justify-center text-gray-500">
+              <ArrowLeft size={24} />
+            </button>
+            <span className="text-xs font-black uppercase tracking-widest text-[#8B6550]">Passo {step} de 3</span>
+            <div className="w-10"></div>
+          </header>
+
+          <div className="flex-1 overflow-y-auto px-6 max-w-lg mx-auto w-full">
             {step === 4 ? (
-              <div style={{ textAlign: "center", position: "relative" }}>
-                <button onClick={resetCheckout} style={{ position: "absolute", top: -10, right: -10, background: "none", border: "none" }}><X size={20} /></button>
-                <div style={{ fontSize: 60, marginBottom: 10 }}>✅</div>
-                <h2 style={{ fontWeight: 900, color: NAVY }}>Pedido Recebido!</h2>
-                <p style={{ fontSize: 22, fontWeight: 900, color: ORANGE, margin: "10px 0" }}>#{pedidoId.slice(0, 6).toUpperCase()}</p>
-                <button onClick={() => {
-                  const m = encodeURIComponent(`🍔 *Meu Pedido*\nNúmero: #${pedidoId.slice(0, 6).toUpperCase()}\nTotal: ${formatCurrency(total)}`);
-                  window.open(`https://wa.me/?text=${m}`, '_blank');
-                }} style={{ width: "100%", padding: 12, background: "#25d366", color: "#fff", border: "none", borderRadius: 10, fontWeight: 700, marginBottom: 15 }}>🟢 Compartilhar WhatsApp</button>
-                <p style={{ fontSize: 13, color: "#666", marginBottom: 20 }}>Acompanhe em "Meus Pedidos" no topo da página.</p>
-                <button className="step-btn" style={{ background: ORANGE, color: "#fff" }} onClick={resetCheckout}>Novo Pedido</button>
+              <div className="text-center py-10">
+                <div className="w-24 h-24 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
+                  <CheckCircle2 size={48} className="text-green-600" />
+                </div>
+                <h2 className="text-3xl font-black mb-2" style={{ color: COLORS.dark }}>Pronto!</h2>
+                <p className="text-gray-500 mb-8 leading-relaxed">Seu pedido foi enviado para a cozinha. Agora é só aguardar!</p>
+                
+                <div className="bg-orange-50 rounded-3xl p-6 mb-8 border border-orange-100">
+                  <span className="text-[10px] font-bold text-orange-400 uppercase tracking-widest mb-2 block">Número do Pedido</span>
+                  <span className="text-2xl font-black text-orange-600">#{pedidoId.slice(0, 6).toUpperCase()}</span>
+                </div>
+
+                <div className="space-y-4">
+                  <button 
+                    onClick={() => {
+                        const m = encodeURIComponent(`🥘 *Novo Pedido - Bom Apetite*\n*Número:* #${pedidoId.slice(0, 6).toUpperCase()}\n*Cliente:* ${nome}\n*Total:* ${formatCurrency(total)}`);
+                        window.open(`https://wa.me/?text=${m}`, '_blank');
+                    }}
+                    className="w-full bg-[#25D366] text-white py-4 rounded-2xl font-black flex items-center justify-center gap-2"
+                  >
+                    Compartilhar no WhatsApp
+                  </button>
+                  <button onClick={resetCheckout} className="w-full text-gray-400 font-bold text-sm underline">Voltar para o Cardápio</button>
+                </div>
               </div>
             ) : (
               <>
-                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 20 }}>
-                  <h2 style={{ fontWeight: 900, fontSize: 18 }}>{step === 1 ? "Entrega" : step === 2 ? "Dados" : "Pagamento"}</h2>
-                  <button onClick={() => setCheckoutOpen(false)} style={{ background: "none", border: "none" }}><X size={22} /></button>
-                </div>
+                <h2 className="text-3xl font-black mb-8" style={{ color: COLORS.dark }}>
+                  {step === 1 ? "Como deseja receber?" : step === 2 ? "Seus dados" : "Forma de pagamento"}
+                </h2>
+
                 {step === 1 && (
-                  <div style={{ display: "flex", gap: 10 }}>
-                    <div className={`pill-radio${orderType === "Local" ? " active" : ""}`} onClick={() => setOrderType("Local")}>🍽️<p>Retirar</p></div>
-                    <div className={`pill-radio${orderType === "Delivery" ? " active" : ""}`} onClick={() => setOrderType("Delivery")}>🛵<p>Entrega</p></div>
+                  <div className="space-y-4">
+                    <button 
+                      onClick={() => setOrderType("Delivery")} 
+                      className={`w-full p-5 rounded-3xl border-2 transition-all flex items-center gap-4 ${orderType === "Delivery" ? "border-orange-600 bg-orange-50/50" : "border-gray-100"}`}
+                    >
+                      <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${orderType === "Delivery" ? "bg-orange-600 text-white" : "bg-gray-100 text-gray-500"}`}>
+                        <Truck size={24} />
+                      </div>
+                      <div className="text-left">
+                        <span className="font-black block leading-none">Receber em Casa (Delivery)</span>
+                        <span className="text-xs text-gray-400 mt-1 block">Entregamos com todo cuidado</span>
+                      </div>
+                    </button>
+                    <button 
+                      onClick={() => setOrderType("Retirada")} 
+                      className={`w-full p-5 rounded-3xl border-2 transition-all flex items-center gap-4 ${orderType === "Retirada" ? "border-orange-600 bg-orange-50/50" : "border-gray-100"}`}
+                    >
+                      <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${orderType === "Retirada" ? "bg-orange-600 text-white" : "bg-gray-100 text-gray-500"}`}>
+                        <MapPin size={24} />
+                      </div>
+                      <div className="text-left">
+                        <span className="font-black block leading-none">Vou Buscar (Retirada)</span>
+                        <span className="text-xs text-gray-400 mt-1 block">Rua do Sabor, 123 - Centro</span>
+                      </div>
+                    </button>
                   </div>
                 )}
+
                 {step === 2 && (
-                  <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                    <input className="input-field" value={nome} onChange={e => setNome(e.target.value)} placeholder="Seu nome" />
-                    <input className="input-field" value={telefone} onChange={e => setTelefone(e.target.value)} placeholder="WhatsApp" />
-                    {orderType === "Delivery" && <input className="input-field" value={endereco} onChange={e => setEndereco(e.target.value)} placeholder="Endereço" />}
-                    <textarea className="input-field" value={observacoes} onChange={e => setObservacoes(e.target.value)} placeholder="Observações" />
+                  <div className="space-y-5">
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-black uppercase tracking-widest text-[#8B6550] ml-1">Seu Nome</label>
+                      <input className="w-full bg-gray-50 border-none rounded-2xl py-4 px-5 outline-none focus:ring-2 ring-orange-100" value={nome} onChange={e => setNome(e.target.value)} placeholder="Ex: Maria Silva" />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-black uppercase tracking-widest text-[#8B6550] ml-1">WhatsApp</label>
+                      <input className="w-full bg-gray-50 border-none rounded-2xl py-4 px-5 outline-none focus:ring-2 ring-orange-100" value={telefone} onChange={e => setTelefone(e.target.value)} placeholder="(00) 00000-0000" />
+                    </div>
+                    {orderType === "Delivery" && (
+                      <>
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] font-black uppercase tracking-widest text-[#8B6550] ml-1">Endereço Completo</label>
+                          <input className="w-full bg-gray-50 border-none rounded-2xl py-4 px-5 outline-none focus:ring-2 ring-orange-100" value={endereco} onChange={e => setEndereco(e.target.value)} placeholder="Rua, número, bairro..." />
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="space-y-1.5">
+                            <label className="text-[10px] font-black uppercase tracking-widest text-[#8B6550] ml-1">Complemento</label>
+                            <input className="w-full bg-gray-50 border-none rounded-2xl py-4 px-5 outline-none focus:ring-2 ring-orange-100" value={complemento} onChange={e => setComplemento(e.target.value)} placeholder="Apto, Casa 2..." />
+                          </div>
+                          <div className="space-y-1.5">
+                            <label className="text-[10px] font-black uppercase tracking-widest text-[#8B6550] ml-1">CEP</label>
+                            <input className="w-full bg-gray-50 border-none rounded-2xl py-4 px-5 outline-none focus:ring-2 ring-orange-100" value={cep} onChange={e => setCep(e.target.value)} placeholder="00000-000" />
+                          </div>
+                        </div>
+                      </>
+                    )}
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-black uppercase tracking-widest text-[#8B6550] ml-1">Observações</label>
+                      <textarea className="w-full bg-gray-50 border-none rounded-2xl py-4 px-5 outline-none focus:ring-2 ring-orange-100 resize-none h-24" value={observacoes} onChange={e => setObservacoes(e.target.value)} placeholder="Alguma restrição ou pedido especial?" />
+                    </div>
                   </div>
                 )}
+
                 {step === 3 && (
-                  <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-                      {formasPgto.map(f => <button key={f.id} className={`pgto-btn${pgtoId === f.id ? " active" : ""}`} onClick={() => setPgtoId(f.id)}>{f.nome}</button>)}
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-1 gap-3">
+                      {formasPgto.map(f => (
+                        <button 
+                          key={f.id} 
+                          onClick={() => setPgtoId(f.id)}
+                          className={`w-full p-5 rounded-3xl border-2 transition-all flex items-center justify-between ${pgtoId === f.id ? "border-orange-600 bg-orange-50/50" : "border-gray-100"}`}
+                        >
+                          <span className="font-black text-sm">{f.nome}</span>
+                          {pgtoId === f.id && <CheckCircle2 className="text-orange-600" size={20} />}
+                        </button>
+                      ))}
                     </div>
+
                     {getPgtoType().isPix && (
-                      <div style={{ textAlign: "center", background: "#f0fdf4", padding: 15, borderRadius: 10 }}>
-                        {pixLoading ? "Gerando..." : pixQr ? <><img src={`data:image/png;base64,${pixQr}`} style={{ width: 150, borderRadius: 10 }} /><Countdown seconds={countdown} /></> : <button onClick={gerarPix} className="step-btn" style={{ background: "#16a34a", color: "#fff" }}>Gerar PIX</button>}
+                      <div className="mt-8 bg-gray-50 rounded-[32px] p-8 border border-dashed border-gray-200">
+                        {pixLoading ? (
+                          <div className="flex flex-col items-center py-10">
+                            <RefreshCw className="animate-spin text-orange-500 mb-4" size={32} />
+                            <span className="text-xs font-bold text-gray-500">Gerando seu PIX...</span>
+                          </div>
+                        ) : pixQr ? (
+                          <div className="flex flex-col items-center">
+                            <span className="text-[10px] font-black uppercase tracking-[0.2em] mb-4 text-orange-400">Escaneie o QR Code</span>
+                            <div className="bg-white p-4 rounded-3xl shadow-sm mb-4 border border-gray-100">
+                              <img src={`data:image/png;base64,${pixQr}`} className="w-48 h-48" />
+                            </div>
+                            <Countdown seconds={countdown} />
+                            <button 
+                              onClick={() => {
+                                navigator.clipboard.writeText(pixCopyCola);
+                                alert("Link PIX copiado!");
+                              }}
+                              className="text-orange-600 text-xs font-bold underline mt-2"
+                            >
+                              Copiar código PIX
+                            </button>
+                          </div>
+                        ) : (
+                          <button onClick={gerarPix} className="w-full bg-green-500 text-white py-4 rounded-2xl font-black flex items-center justify-center gap-2">
+                            <QrCode size={20} /> Gerar QR Code
+                          </button>
+                        )}
+                      </div>
+                    )}
+                    
+                    {getPgtoType().isDinheiro && (
+                      <div className="mt-4 p-4 bg-gray-50 rounded-2xl">
+                        <label className="text-xs font-bold text-gray-500 mb-2 block">Precisa de troco para quanto?</label>
+                        <input className="w-full bg-white border-none rounded-xl py-3 px-4 outline-none focus:ring-1 ring-orange-200" value={troco} onChange={e => setTroco(e.target.value)} placeholder="Deixe vazio se não precisar" />
                       </div>
                     )}
                   </div>
                 )}
-                <div style={{ display: "flex", gap: 10, marginTop: 20 }}>
-                  {step > 1 && <button className="step-btn" style={{ background: "#eee", flex: 1 }} onClick={() => setStep(step - 1)}>Voltar</button>}
-                  <button className="step-btn" style={{ background: ORANGE, color: "#fff", flex: 2 }} onClick={() => step < 3 ? setStep(step + 1) : handleConfirmar()} disabled={submitting}>{submitting ? "Enviando..." : step === 3 ? "Confirmar" : "Próximo"}</button>
+
+                <div className="sticky bottom-0 pt-10 pb-8 bg-white mt-auto">
+                    <button 
+                      onClick={() => step < 3 ? setStep(step + 1) : handleConfirmar()} 
+                      disabled={submitting}
+                      className="w-full bg-[#3D1F0A] text-white py-4 rounded-2xl font-black uppercase tracking-widest shadow-xl active:scale-95 transition-all flex items-center justify-center gap-2"
+                    >
+                      {submitting ? <RefreshCw className="animate-spin" size={20} /> : (step === 3 ? "Confirmar Pedido" : "Continuar")}
+                    </button>
+                    <div className="mt-4 flex justify-between items-center text-[10px] font-bold text-gray-400 uppercase tracking-widest px-2">
+                       <span>Subtotal: {formatCurrency(subtotal)}</span>
+                       {taxaEntrega > 0 && <span>Taxa: {formatCurrency(taxaEntrega)}</span>}
+                    </div>
                 </div>
               </>
             )}
@@ -375,30 +718,63 @@ export default function Catalogo() {
         </div>
       )}
 
+      {/* HISTORY MODAL */}
       {historyOpen && (
-        <div className="modal-overlay" onClick={() => setHistoryOpen(false)}>
-          <div className="modal-panel" onClick={e => e.stopPropagation()} style={{ background: "#f8fafc" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-              <h2 style={{ fontWeight: 900, color: NAVY }}>Meus Pedidos</h2>
-              <button onClick={() => setHistoryOpen(false)} style={{ background: "none", border: "none" }}><X size={22} /></button>
-            </div>
-            {historyLoading ? <p style={{ textAlign: "center", padding: 30 }}>Carregando...</p> : meusPedidos.length === 0 ? <p style={{ textAlign: "center", color: "#999", padding: 30 }}>Nenhum pedido feito.</p> : (
-              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                {meusPedidos.map(p => (
-                  <div key={p.id} style={{ background: "#fff", borderRadius: 12, padding: 15, border: "1px solid #e2e8f0" }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
-                      <span style={{ fontWeight: 800 }}>#{p.id.slice(0, 6).toUpperCase()}</span>
-                      <span style={{ fontSize: 11, fontWeight: 900, padding: "2px 8px", borderRadius: 5, background: p.situacao === "Concluída" ? "#f0fdf4" : "#fff7ed", color: p.situacao === "Concluída" ? "#16a34a" : ORANGE }}>{p.situacao}</span>
+        <div className="fixed inset-0 z-[300] bg-white flex flex-col font-sans">
+          <header className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+            <h2 className="text-xl font-black" style={{ color: COLORS.dark }}>Meus Pedidos</h2>
+            <button onClick={() => setHistoryOpen(false)} className="p-2 bg-gray-50 rounded-full text-gray-500">
+              <X size={20} />
+            </button>
+          </header>
+          
+          <div className="flex-1 overflow-y-auto px-6 py-6 space-y-4">
+            {historyLoading ? (
+              <div className="flex flex-col items-center py-20">
+                <RefreshCw className="animate-spin text-orange-500 mb-4" size={32} />
+                <span className="text-sm font-bold text-gray-500 font-sans">Buscando seus pedidos...</span>
+              </div>
+            ) : meusPedidos.length === 0 ? (
+              <div className="text-center py-20 font-sans">
+                <div className="w-20 h-20 bg-orange-50 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <ClipboardList size={32} className="text-orange-200" />
+                </div>
+                <p className="text-gray-400 font-bold mb-1">Nenhum pedido encontrado</p>
+                <p className="text-xs text-gray-300">Você ainda não realizou pedidos conosco.</p>
+              </div>
+            ) : (
+              meusPedidos.map(p => (
+                <div key={p.id} className="bg-white rounded-3xl p-5 border border-gray-100 shadow-sm font-sans">
+                  <div className="flex justify-between items-start mb-3">
+                    <div>
+                      <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 block">Pedido</span>
+                      <span className="font-black text-sm" style={{ color: COLORS.dark }}>#{p.id.slice(0, 6).toUpperCase()}</span>
                     </div>
-                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13 }}>
-                      <span style={{ color: "#999" }}>{new Date(p.criado_em).toLocaleDateString()}</span>
-                      <span style={{ fontWeight: 900 }}>{formatCurrency(p.total)}</span>
+                    <div className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-wider ${
+                      p.situacao === 'Concluída' ? "bg-green-100 text-green-600" : "bg-orange-100 text-orange-600"
+                    }`}>
+                      {p.situacao}
                     </div>
                   </div>
-                ))}
-              </div>
+                  <div className="flex justify-between items-end border-t border-dashed border-gray-100 pt-3">
+                    <div className="flex items-center gap-1.5 text-gray-400">
+                      <Clock size={12} />
+                      <span className="text-[10px] font-bold">{new Date(p.criado_em).toLocaleDateString()}</span>
+                    </div>
+                    <span className="text-base font-black text-orange-600">{formatCurrency(p.total)}</span>
+                  </div>
+                </div>
+              ))
             )}
-            <button className="step-btn" style={{ background: NAVY, color: "#fff", marginTop: 20 }} onClick={fetchHistorico} disabled={historyLoading}><RefreshCw size={16} className={historyLoading ? "animate-spin" : ""} style={{ marginRight: 8 }} /> Atualizar Lista</button>
+          </div>
+          
+          <div className="p-6 bg-gray-50">
+            <button 
+              onClick={fetchHistorico}
+              className="w-full bg-[#3D1F0A] text-white py-4 rounded-2xl font-black uppercase tracking-widest flex items-center justify-center gap-2"
+            >
+              <RefreshCw size={18} /> Atualizar Lista
+            </button>
           </div>
         </div>
       )}

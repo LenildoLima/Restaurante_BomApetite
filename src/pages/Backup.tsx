@@ -80,7 +80,7 @@ export default function BackupPage() {
 
     try {
       const backup: any = {
-        sistema: "LaunchApp",
+        sistema: "Bom Apetite",
         versao: "1.0",
         data_backup: new Date().toISOString(),
         total_registros: {},
@@ -104,7 +104,7 @@ export default function BackupPage() {
       }
 
       // Gerar arquivo
-      const nomeArquivo = `launchapp-backup-${new Date().toLocaleDateString("pt-BR").replace(/\//g, "-")}-${new Date().getHours()}-${new Date().getMinutes()}.json`;
+      const nomeArquivo = `bom-apetite-backup-${new Date().toLocaleDateString("pt-BR").replace(/\//g, "-")}-${new Date().getHours()}-${new Date().getMinutes()}.json`;
       const blob = new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" });
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
@@ -145,8 +145,8 @@ export default function BackupPage() {
     reader.onload = (event) => {
       try {
         const json = JSON.parse(event.target?.result as string);
-        if (json.sistema !== "LaunchApp") {
-          toast.error("Arquivo inválido. Não é um backup do LaunchApp.");
+        if (json.sistema !== "Bom Apetite") {
+          toast.error("Arquivo inválido. Não é um backup do Bom Apetite.");
           return;
         }
         setArquivoRestaurar(json);

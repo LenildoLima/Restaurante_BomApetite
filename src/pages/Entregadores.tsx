@@ -83,8 +83,8 @@ function Receipt({ data }: { data: ComprovanteData }) {
   return (
     <div id="receipt-content" style={{ fontFamily: "monospace", fontSize: 11, width: "100%", maxWidth: 300, padding: "8px 0", background: "white", color: "black" }}>
       <div style={{ textAlign: "center" }}>{sep}</div>
-      <div style={{ textAlign: "center", fontWeight: "bold", fontSize: 13 }}>LaunchApp</div>
-      <div style={{ textAlign: "center", fontSize: 10 }}>Gestão de Lanchonete</div>
+      <div style={{ textAlign: "center", fontWeight: "bold", fontSize: 13 }}>Bom Apetite</div>
+      <div style={{ textAlign: "center", fontSize: 10 }}>Gestão de Marmitaria</div>
       <div style={{ textAlign: "center" }}>{sep}</div>
       <div style={{ textAlign: "center", fontWeight: "bold" }}>COMPROVANTE DE PAGAMENTO</div>
       <div style={{ textAlign: "center" }}>{sepLight}</div>

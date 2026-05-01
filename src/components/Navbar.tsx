@@ -107,7 +107,7 @@ export function Navbar() {
           <Link to={usuario?.perfil === "cozinheiro" ? "/cozinha" : "/"} className="flex flex-col group transition-all duration-300">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 md:w-12 md:h-12 rounded-2xl bg-[#1e3a8a]/20 backdrop-blur-sm shadow-xl flex items-center justify-center text-[22px] md:text-[28px] border border-white/10 transition-all duration-500 group-hover:scale-110 group-hover:rotate-6">
-                🍔
+                <img src="/logo-bom-apetite.png" alt="Logo" style={{ width: 28, height: 28, objectFit: "contain" }} />
               </div>
               <div>
                 <div className="flex items-baseline leading-none">
@@ -328,7 +328,7 @@ export function Navbar() {
 
               <div className="flex items-center gap-3 mb-4">
                 <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center text-[22px] border border-white/20">
-                  🍔
+                  <img src="/logo-bom-apetite.png" alt="Logo" style={{ width: 24, height: 24, objectFit: "contain" }} />
                 </div>
                 <div>
                   <div className="flex items-baseline leading-none">
@@ -336,7 +336,7 @@ export function Navbar() {
                     <span className="font-light text-[18px] text-white">App</span>
                   </div>
                   <p className="text-[7px] text-[#FACC15] font-black uppercase tracking-widest leading-none mt-1">
-                    GESTÃO DE LANCHONETE
+                    GESTÃO DE MARMITARIA
                   </p>
                 </div>
               </div>
